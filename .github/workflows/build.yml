@@ -43,6 +43,8 @@ jobs:
         run: rustup update stable --no-self-update
       - name: Build, test and render AppKit UI
         run: bash rust/build-macos.sh
+      - name: Verify install, upgrade, rollback and uninstall
+        run: bash tests/install-macos.sh
       - uses: actions/upload-artifact@v4
         with:
           name: macos-${{ matrix.arch }}

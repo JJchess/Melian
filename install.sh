@@ -19,15 +19,33 @@ done
 app="$HOME/Applications/Melian.app"
 bundle_id=io.github.jjchess.melian
 owns_app() { [[ -d "$1" && ! -L "$1" ]] && [[ "$(/usr/bin/plutil -extract CFBundleIdentifier raw -o - "$1/Contents/Info.plist" 2>/dev/null)" == "$bundle_id" ]]; }
-if $uninstall; then
-  owns_app "$app" || fail '未找到本安装器管理的 Melian.app。'
-  "$app/Contents/MacOS/claude-guard" --quit >/dev/null 2>&1 || true
-  "$app/Contents/MacOS/ClaudeGuard" --uninstall-hooks
+remove_cli_links() {
   for tool in melian claude-guard; do
     link="$HOME/.local/bin/$tool"
     target="$app/Contents/MacOS/ClaudeGuard"; [[ "$tool" == claude-guard ]] && target="$app/Contents/MacOS/claude-guard"
     if [[ -L "$link" && "$(readlink "$link")" == "$target" ]]; then rm -- "$link"; fi
   done
+}
+remove_profile_block() {
+  [[ -f "$1" ]] || return 0
+  profile_temp="$(mktemp "$1.melian-cleanup.XXXXXXXX")"
+  # Only remove the exact block inserted below; preserve edited user content.
+  /usr/bin/awk '
+    { lines[NR]=$0 }
+    END { for(i=1;i<=NR;i++) {
+      if(lines[i]=="# Melian CLI path" && lines[i+1]=="export PATH=\"$HOME/.local/bin:$PATH\"" && lines[i+2]=="# End Melian CLI path") {i+=2; continue}
+      print lines[i]
+    }}' "$1" > "$profile_temp"
+  cat "$profile_temp" > "$1"
+  rm -- "$profile_temp"
+}
+if $uninstall; then
+  owns_app "$app" || fail '未找到本安装器管理的 Melian.app。'
+  "$app/Contents/MacOS/claude-guard" --quit >/dev/null 2>&1 || true
+  "$app/Contents/MacOS/ClaudeGuard" --uninstall-hooks
+  remove_cli_links
+  remove_profile_block "$HOME/.zprofile"
+  remove_profile_block "$HOME/.bash_profile"
   # Fixed, owned user application path; never operate on an arbitrary argument.
   rm -rf -- "$app"
   printf 'Melian 已卸载，设置和日志保留。\n'
@@ -38,14 +56,26 @@ case "$(uname -m)" in arm64) arch=arm64;; x86_64) arch=x64;; *) fail '不支持�
 [[ "$(sw_vers -productVersion | cut -d. -f1)" -ge 13 ]] || fail '需要 macOS 13 或更新版本。'
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/melian-install.XXXXXXXX")"
 backup=''
+staged=''
+touched=false
 committed=false
 cleanup() {
   code=$?
-  if [[ -n "$backup" && -d "$backup" ]] && ! $committed; then
+  set +e
+  if $touched && ! $committed; then
     if owns_app "$app"; then rm -rf -- "$app"; fi
-    [[ ! -e "$app" ]] && mv -- "$backup" "$app"
-    "$app/Contents/MacOS/ClaudeGuard" --install-hooks >/dev/null 2>&1 || true
+    if [[ -n "$backup" && -d "$backup" && ! -e "$app" && ! -L "$app" ]]; then mv -- "$backup" "$app"; fi
+    remove_cli_links
+    for tool in melian claude-guard; do
+      [[ ! -L "$tmp/$tool" ]] || cp -P "$tmp/$tool" "$HOME/.local/bin/$tool"
+    done
+    for file in settings agent profile; do
+      case "$file" in settings) destination="$settings";; agent) destination="$agent";; profile) destination="$profile";; esac
+      if [[ -f "$tmp/$file" ]]; then cp -p "$tmp/$file" "$destination"; else rm -f -- "$destination"; fi
+    done
+    if [[ -n "$backup" ]] && owns_app "$app" && ! $no_start; then open "$app"; fi
   fi
+  if [[ -n "$staged" && -d "$staged" ]]; then rm -rf -- "$staged"; fi
   rm -rf -- "$tmp"
   return "$code"
 }
@@ -57,6 +87,8 @@ printf '正在获取 Melian 安装包…\n'
 fetch "$api" "$tmp/release.json"
 tag="$(/usr/bin/plutil -extract tag_name raw -o - "$tmp/release.json")"
 [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || fail '发布信息无效。'
+[[ "$version" == latest || "$version" == "$tag" ]] || fail '发布版本不匹配。'
+[[ "$(/usr/bin/plutil -extract draft raw -o - "$tmp/release.json")" == false ]] || fail '不能安装未发布版本。'
 base="https://github.com/JJchess/Melian/releases/download/$tag"
 asset="Melian-macos-$arch.tar.gz"
 fetch "$base/SHA256SUMS.txt" "$tmp/SHA256SUMS.txt"
@@ -79,24 +111,37 @@ owns_app "$new_app" || fail '应用标识不匹配。'
 codesign --verify --deep --strict "$new_app"
 [[ -x "$new_app/Contents/MacOS/ClaudeGuard" && -x "$new_app/Contents/MacOS/claude-guard" ]] || fail '安装包不完整。'
 mkdir -p "$HOME/Applications" "$HOME/.local/bin"
+# Stage on the destination volume so replacing the app is a rename.
+staged="$(mktemp -d "$HOME/Applications/.Melian-stage.XXXXXXXX")"
+mv -- "$new_app" "$staged/Melian.app"
+new_app="$staged/Melian.app"
+settings="$HOME/Library/Application Support/Melian/settings.json"
+agent="$HOME/Library/LaunchAgents/$bundle_id.plist"
+profile="$HOME/.zprofile"
+[[ "${SHELL:-/bin/zsh}" == */bash ]] && profile="$HOME/.bash_profile"
+for file in settings agent profile; do
+  case "$file" in settings) source="$settings";; agent) source="$agent";; profile) source="$profile";; esac
+  if [[ -e "$source" ]]; then [[ -f "$source" ]] || fail "不是普通配置文件：$source"; cp -p "$source" "$tmp/$file"; fi
+done
 for tool in melian claude-guard; do
   link="$HOME/.local/bin/$tool"
   target="$app/Contents/MacOS/ClaudeGuard"; [[ "$tool" == claude-guard ]] && target="$app/Contents/MacOS/claude-guard"
   if [[ -e "$link" || -L "$link" ]]; then [[ -L "$link" && "$(readlink "$link")" == "$target" ]] || fail "命令路径已被其他程序占用：$link"; fi
+  [[ ! -L "$link" ]] || cp -P "$link" "$tmp/$tool"
 done
 if [[ -e "$app" || -L "$app" ]]; then
   owns_app "$app" || fail '目标应用不属于 Melian，未替换。'
   "$app/Contents/MacOS/claude-guard" --quit >/dev/null 2>&1 || true
   backup="$HOME/Applications/.Melian-rollback-$$.app"
-  [[ ! -e "$backup" ]] || fail '回退目录已存在。'
+  [[ ! -e "$backup" && ! -L "$backup" ]] || fail '回退目录已存在。'
+  touched=true
   mv -- "$app" "$backup"
 fi
+touched=true
 mv -- "$new_app" "$app"
 "$app/Contents/MacOS/ClaudeGuard" --install-hooks
 ln -sfn -- "$app/Contents/MacOS/ClaudeGuard" "$HOME/.local/bin/melian"
 ln -sfn -- "$app/Contents/MacOS/claude-guard" "$HOME/.local/bin/claude-guard"
-profile="$HOME/.zprofile"
-[[ "${SHELL:-/bin/zsh}" == */bash ]] && profile="$HOME/.bash_profile"
 if ! grep -q '^# Melian CLI path$' "$profile" 2>/dev/null; then
   printf '\n# Melian CLI path\nexport PATH="$HOME/.local/bin:$PATH"\n# End Melian CLI path\n' >> "$profile"
 fi
