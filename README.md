@@ -123,15 +123,7 @@ Melian 只为该入口启动的进程设置代理，原始参数分别传递。�
 
 ## 架构
 
-```mermaid
-flowchart LR
-    Desktop["Claude Desktop<br/>已接入的客户端"] --> Proxy["本机代理<br/>127.0.0.1:17890"]
-    Code["Claude Code<br/>经 claude-guard 启动"] --> Proxy
-    Proxy --> Clash["Clash / Mihomo"]
-    Clash --> Claude["Claude 服务"]
-    Core["检测核心<br/>模式 · 节点 · IP 属地"] -. "决定放行 / 撤销连接" .-> Proxy
-    Core -. "控制管道与代理路径验证" .-> Clash
-```
+![Melian 连接路径：已接入的 Claude Desktop 和经 claude-guard 启动的 Claude Code，通过本机代理连接 Clash，再访问 Claude 服务；检测核心验证网络并控制放行或撤销连接。](docs/architecture.svg)
 
 UI 负责呈现状态与接收操作；检测核心负责验证，本机代理负责放行和断开连接。默认拒绝连接，HTTPS 流量不解密。
 

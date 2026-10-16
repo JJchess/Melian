@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="460" viewBox="0 0 1200 460" role="img" aria-labelledby="title description">
+  <title id="title">Melian 连接路径</title>
+  <desc id="description">已接入的 Claude Desktop 和经 claude-guard 启动的 Claude Code，通过本机代理 127.0.0.1:17890 连接 Clash 或 Mihomo，再访问 Claude 服务。检测核心读取模式与节点、验证实际 IP 属地，决定放行或撤销连接。实线表示连接路径，虚线表示检测与控制。</desc>
+  <defs>
+    <marker id="flow-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M1 1L9 5 1 9" fill="none" stroke="#a5b3ad" stroke-width="1.5" stroke-linejoin="round"/>
+    </marker>
+    <marker id="check-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M1 1L9 5 1 9" fill="none" stroke="#83d7b0" stroke-width="1.5" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <rect x="0.5" y="0.5" width="1199" height="459" rx="24" fill="#111718" stroke="#303b37"/>
+  <g font-family="Segoe UI, Microsoft YaHei, sans-serif">
+    <text x="40" y="48" fill="#eef3f0" font-size="24" font-weight="600">连接路径</text>
+    <text x="40" y="79" fill="#9baea3" font-size="15">默认拒绝 · 验证后放行</text>
+    <g fill="none" stroke="#a5b3ad" stroke-width="2" stroke-linejoin="round">
+      <path d="M250 241H300V357H250"/>
+      <path d="M300 296H360" marker-end="url(#flow-arrow)"/>
+      <path d="M600 296H708" marker-end="url(#flow-arrow)"/>
+      <path d="M918 296H1006" marker-end="url(#flow-arrow)"/>
+    </g>
+    <g fill="none" stroke="#83d7b0" stroke-width="2" stroke-dasharray="5 6">
+      <path d="M480 174V246" marker-end="url(#check-arrow)"/>
+      <path d="M813 174V246" marker-end="url(#check-arrow)"/>
+    </g>
+    <text x="495" y="215" fill="#a3c8b4" font-size="14">放行 / 撤销</text>
+    <text x="828" y="215" fill="#a3c8b4" font-size="14">读取与验证</text>
+    <rect x="360" y="84" width="558" height="90" rx="18" fill="#192b23" stroke="#426750"/>
+    <circle cx="389" cy="115" r="5" fill="#83d7b0"/>
+    <text x="405" y="122" fill="#e5f2e9" font-size="21" font-weight="600">检测核心</text>
+    <text x="384" y="150" fill="#afc5b8" font-size="16">全局模式 · 明确节点 · 实际代理 IP 属地</text>
+    <g fill="#1a2122" stroke="#3b4842">
+      <rect x="40" y="200" width="210" height="82" rx="16"/>
+      <rect x="40" y="316" width="210" height="82" rx="16"/>
+      <rect x="708" y="246" width="210" height="100" rx="18"/>
+      <rect x="1006" y="246" width="154" height="100" rx="18"/>
+    </g>
+    <rect x="360" y="246" width="240" height="100" rx="18" fill="#15221c" stroke="#65957a"/>
+    <g text-anchor="middle">
+      <text x="145" y="233" fill="#edf2ef" font-size="20" font-weight="600">Claude Desktop</text>
+      <text x="145" y="259" fill="#a6b8ae" font-size="15">已接入的客户端</text>
+      <text x="145" y="349" fill="#edf2ef" font-size="20" font-weight="600">Claude Code</text>
+      <text x="145" y="375" fill="#a6b8ae" font-size="15">经 claude-guard 启动</text>
+      <text x="480" y="287" fill="#e6f2eb" font-size="22" font-weight="600">本机代理</text>
+      <text x="480" y="316" fill="#b1d6c0" font-size="17">127.0.0.1:17890</text>
+      <text x="813" y="287" fill="#edf2ef" font-size="21" font-weight="600">Clash / Mihomo</text>
+      <text x="813" y="316" fill="#a6b8ae" font-size="15">实际代理路径</text>
+      <text x="1083" y="287" fill="#edf2ef" font-size="20" font-weight="600">Claude 服务</text>
+      <text x="1083" y="316" fill="#a6b8ae" font-size="15">HTTPS 透传</text>
+    </g>
+    <path d="M714 420H744" stroke="#a5b3ad" stroke-width="2"/>
+    <text x="754" y="425" fill="#9baea3" font-size="14">连接路径</text>
+    <path d="M880 420H910" stroke="#83d7b0" stroke-width="2" stroke-dasharray="5 6"/>
+    <text x="920" y="425" fill="#9baea3" font-size="14">检测与控制</text>
+  </g>
+</svg>
