@@ -19,6 +19,17 @@ done
 app="$HOME/Applications/Melian.app"
 bundle_id=io.github.jjchess.melian
 owns_app() { [[ -d "$1" && ! -L "$1" ]] && [[ "$(/usr/bin/plutil -extract CFBundleIdentifier raw -o - "$1/Contents/Info.plist" 2>/dev/null)" == "$bundle_id" ]]; }
+quit_guard() {
+  if "$app/Contents/MacOS/claude-guard" --quit >/dev/null 2>&1; then
+    # An acknowledged command is queued on AppKit, not proof the old instance
+    # released its socket. Wait before replacing or reopening the application.
+    for attempt in {1..40}; do
+      if ! "$app/Contents/MacOS/ClaudeGuard" --health-check >/dev/null 2>&1; then return 0; fi
+      sleep 0.1
+    done
+    fail 'Melian 尚未退出，未替换应用。请从菜单退出后重试。'
+  fi
+}
 remove_cli_links() {
   for tool in melian claude-guard; do
     link="$HOME/.local/bin/$tool"
@@ -41,7 +52,7 @@ remove_profile_block() {
 }
 if $uninstall; then
   owns_app "$app" || fail '未找到本安装器管理的 Melian.app。'
-  "$app/Contents/MacOS/claude-guard" --quit >/dev/null 2>&1 || true
+  quit_guard
   "$app/Contents/MacOS/ClaudeGuard" --uninstall-hooks
   remove_cli_links
   remove_profile_block "$HOME/.zprofile"
@@ -131,7 +142,7 @@ for tool in melian claude-guard; do
 done
 if [[ -e "$app" || -L "$app" ]]; then
   owns_app "$app" || fail '目标应用不属于 Melian，未替换。'
-  "$app/Contents/MacOS/claude-guard" --quit >/dev/null 2>&1 || true
+  quit_guard
   backup="$HOME/Applications/.Melian-rollback-$$.app"
   [[ ! -e "$backup" && ! -L "$backup" ]] || fail '回退目录已存在。'
   touched=true

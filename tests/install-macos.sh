@@ -61,7 +61,8 @@ assert.equal(value.ok, true); assert.equal(value.state.allowed, false);
 JS
 result="$(/usr/bin/curl --silent --max-time 3 --noproxy '' --proxy http://127.0.0.1:17890 --output /dev/null --write-out '%{http_code}' http://127.0.0.1:9/)"
 [[ "$result" == 503 ]]
-"$app/Contents/MacOS/claude-guard" --quit
+# Upgrade with the old instance still running, then require it to exit.
+bash "$root/install.sh" --no-start
 for attempt in {1..40}; do
   if ! kill -0 "$guard_pid" 2>/dev/null; then break; fi
   sleep 0.25
@@ -108,4 +109,4 @@ done
 # First-install failure must remove its partial application and hooks, too.
 expect_failure
 [[ ! -e "$app" && ! -e "$agent" && ! -L "$HOME/.local/bin/melian" ]]
-echo 'Installer: checksum, fresh install, preferences, rollback and uninstall passed.'
+echo 'Installer: checksum, fresh install, running upgrade, preferences, rollback and uninstall passed.'
