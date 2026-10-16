@@ -1,3 +1,4 @@
+#![cfg(windows)]
 use guard_platform::{host::Sessions, integration, ipc, launch};
 use guard_protocol::{pipe_name, Request, State, EXTENSION_ID};
 use std::{ffi::OsStr, path::Path};

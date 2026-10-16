@@ -1,7 +1,7 @@
 use std::{
     net::{Shutdown, TcpStream},
     sync::{Arc, Mutex, Weak},
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime},
 };
 use tokio_util::sync::CancellationToken;
 #[derive(Clone)]
@@ -17,8 +17,19 @@ struct Lease {
     revoked: CancellationToken,
     sockets: Vec<Weak<TcpStream>>,
     expired: bool,
+    wall_issued: SystemTime,
+    duration: Duration,
 }
 impl Lease {
+    fn valid(&self) -> bool {
+        // Instant remains authoritative. The additional clock only tightens the
+        // lease across macOS sleep (mach_absolute_time can pause while asleep).
+        self.until > Instant::now()
+            && self
+                .wall_issued
+                .elapsed()
+                .is_ok_and(|elapsed| elapsed < self.duration)
+    }
     fn close(&mut self) {
         self.revoked.cancel();
         for socket in self.sockets.drain(..).filter_map(|s| s.upgrade()) {
@@ -36,6 +47,8 @@ impl Default for Gate {
             revoked: CancellationToken::new(),
             sockets: vec![],
             expired: false,
+            wall_issued: SystemTime::now(),
+            duration: Duration::ZERO,
         }))
     }
 }
@@ -45,7 +58,7 @@ impl Gate {
         if g.expired {
             return false;
         }
-        if g.port != 0 && g.until <= Instant::now() {
+        if g.port != 0 && !g.valid() {
             g.port = 0;
             g.expired = true;
             g.generation += 1;
@@ -55,13 +68,15 @@ impl Gate {
         if port == 0 || duration.is_zero() {
             return false;
         }
-        if g.port != port || g.until <= Instant::now() {
+        if g.port != port || !g.valid() {
             g.close();
             g.revoked = CancellationToken::new();
             g.generation += 1;
         }
         g.port = port;
         g.until = Instant::now() + duration;
+        g.wall_issued = SystemTime::now();
+        g.duration = duration;
         true
     }
     pub fn revoke(&self) {
@@ -75,7 +90,7 @@ impl Gate {
     }
     pub fn track(&self, permit: &Permit, socket: &Arc<TcpStream>) -> bool {
         let mut g = self.0.lock().unwrap();
-        if g.generation != permit.generation || g.port != permit.port || g.until <= Instant::now() {
+        if g.generation != permit.generation || g.port != permit.port || !g.valid() {
             let _ = socket.shutdown(Shutdown::Both);
             return false;
         }
@@ -85,7 +100,7 @@ impl Gate {
     }
     pub fn permit(&self) -> Option<Permit> {
         let g = self.0.lock().unwrap();
-        (g.port > 0 && g.until > Instant::now()).then(|| Permit {
+        (g.port > 0 && g.valid()).then(|| Permit {
             port: g.port,
             generation: g.generation,
             revoked: g.revoked.clone(),
@@ -100,7 +115,7 @@ impl Gate {
         if g.expired {
             return true;
         }
-        if g.port == 0 || g.until > Instant::now() {
+        if g.port == 0 || g.valid() {
             return false;
         }
         g.port = 0;

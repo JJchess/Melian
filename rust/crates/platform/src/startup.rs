@@ -70,7 +70,7 @@ pub fn set_enabled(enabled: bool) -> Result<()> {
         let sid = BSTR::from(crate::ipc::current_sid()?);
         let task = scheduler.service.NewTask(0)?;
         task.RegistrationInfo()?
-            .SetDescription(&BSTR::from("Claude 网络守卫：当前用户登录后启动"))?;
+            .SetDescription(&BSTR::from("Melian：当前用户登录后启动"))?;
         let principal = task.Principal()?;
         principal.SetUserId(&sid)?;
         principal.SetLogonType(TASK_LOGON_INTERACTIVE_TOKEN)?;

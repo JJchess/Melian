@@ -3,6 +3,7 @@ use crate::{
     gate::Gate,
     nodes::{CheckError, Snapshot},
     proxy::Proxy,
+    web_probe::WebProbe,
 };
 use anyhow::{bail, Result};
 use chrono::Utc;
@@ -27,6 +28,7 @@ struct Inner {
 pub struct Engine {
     inner: Mutex<Inner>,
     pub gate: Arc<Gate>,
+    pub web_probe: Arc<WebProbe>,
     pub stop: CancellationToken,
     controller: Arc<dyn Controller>,
     probe: Arc<dyn CountryProbe>,
@@ -65,6 +67,7 @@ impl Engine {
                 switching: false,
             }),
             gate: Arc::new(Gate::default()),
+            web_probe: Arc::new(WebProbe::default()),
             stop: CancellationToken::new(),
             controller,
             probe,
@@ -111,7 +114,7 @@ impl Engine {
                 return Err(error);
             }
         };
-        tokio::spawn(proxy.run());
+        tokio::spawn(proxy.with_web_probe(self.web_probe.clone()).run());
         let engine = self.clone();
         tokio::spawn(async move {
             engine.monitor().await;

@@ -1,4 +1,6 @@
+#[cfg(windows)]
 use windows::core::Interface;
+#[cfg(windows)]
 use windows::{
     core::w,
     Win32::{
@@ -6,6 +8,7 @@ use windows::{
         UI::{Accessibility::*, WindowsAndMessaging::*},
     },
 };
+#[cfg(windows)]
 fn main() -> anyhow::Result<()> {
     unsafe {
         CoInitializeEx(None, COINIT_APARTMENTTHREADED).ok()?;
@@ -42,3 +45,5 @@ fn main() -> anyhow::Result<()> {
         Ok(())
     }
 }
+#[cfg(not(windows))]
+fn main() {}

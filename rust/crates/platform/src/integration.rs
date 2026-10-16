@@ -10,12 +10,12 @@ use windows::{
         Foundation::{HWND, LPARAM, WPARAM},
         System::Com::{
             CoCreateInstance, CoInitializeEx, CoTaskMemFree, IPersistFile, CLSCTX_INPROC_SERVER,
-            COINIT_APARTMENTTHREADED,
+            COINIT_APARTMENTTHREADED, STGM_READ,
         },
         UI::{
             Shell::{
                 FOLDERID_Desktop, FOLDERID_Programs, IShellLinkW, SHGetKnownFolderPath, ShellLink,
-                KF_FLAG_DEFAULT,
+                KF_FLAG_DEFAULT, SLGP_RAWPATH,
             },
             WindowsAndMessaging::{SendMessageTimeoutW, SMTO_ABORTIFHUNG, WM_SETTINGCHANGE},
         },
@@ -110,7 +110,7 @@ pub fn system_proxy() -> SystemProxy {
         .into(),
     }
 }
-fn shortcuts() -> Result<Vec<PathBuf>> {
+fn shortcuts_named(name: &str) -> Result<Vec<PathBuf>> {
     unsafe {
         [FOLDERID_Desktop, FOLDERID_Programs]
             .iter()
@@ -118,10 +118,45 @@ fn shortcuts() -> Result<Vec<PathBuf>> {
                 let path = SHGetKnownFolderPath(id, KF_FLAG_DEFAULT, None)?;
                 let value = path.to_string();
                 CoTaskMemFree(Some(path.0.cast()));
-                Ok(PathBuf::from(value?).join("Claude 网络守卫.lnk"))
+                Ok(PathBuf::from(value?).join(name))
             })
             .collect()
     }
+}
+fn shortcuts() -> Result<Vec<PathBuf>> {
+    shortcuts_named("Melian.lnk")
+}
+fn remove_legacy_shortcuts() -> Result<()> {
+    unsafe {
+        for path in shortcuts_named("Claude 网络守卫.lnk")? {
+            if !path.is_file() {
+                continue;
+            }
+            let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)?;
+            let persist: IPersistFile = link.cast()?;
+            if persist
+                .Load(PCWSTR(wide(&path).as_ptr()), STGM_READ)
+                .is_err()
+            {
+                continue;
+            }
+            let mut target = vec![0u16; 32768];
+            if link
+                .GetPath(&mut target, std::ptr::null_mut(), SLGP_RAWPATH.0 as u32)
+                .is_err()
+            {
+                continue;
+            }
+            let len = target.iter().position(|c| *c == 0).unwrap_or(target.len());
+            if String::from_utf16_lossy(&target[..len])
+                .replace('/', "\\")
+                .eq_ignore_ascii_case(&desktop_exe().to_string_lossy().replace('/', "\\"))
+            {
+                fs::remove_file(path)?;
+            }
+        }
+    }
+    Ok(())
 }
 fn create_shortcuts() -> Result<()> {
     unsafe {
@@ -134,11 +169,11 @@ fn create_shortcuts() -> Result<()> {
             link.SetPath(PCWSTR(wide(desktop_exe()).as_ptr()))?;
             link.SetIconLocation(PCWSTR(wide(desktop_exe()).as_ptr()), 0)?;
             link.SetWorkingDirectory(PCWSTR(wide(install_dir()).as_ptr()))?;
-            link.SetDescription(PCWSTR(wide("Claude 网络守卫").as_ptr()))?;
+            link.SetDescription(PCWSTR(wide("Melian").as_ptr()))?;
             let persist: IPersistFile = link.cast()?;
             persist.Save(PCWSTR(wide(path).as_ptr()), true)?;
         }
-        Ok(())
+        remove_legacy_shortcuts()
     }
 }
 fn set_path(add: bool) -> Result<()> {
@@ -193,7 +228,7 @@ pub fn register() -> Result<()> {
     fs::write(
         &manifest,
         serde_json::to_vec_pretty(&serde_json::json!({
-            "name":HOST_NAME,"description":"Claude 网络守卫本机桥接","path":cli_exe(),
+            "name":HOST_NAME,"description":"Melian本机桥接","path":cli_exe(),
             "type":"stdio","allowed_origins":[format!("chrome-extension://{EXTENSION_ID}/")]
         }))?,
     )?;
@@ -215,9 +250,9 @@ pub fn register() -> Result<()> {
     create_shortcuts().context("无法创建快捷方式")?;
     let (key, _) = current.create_subkey(UNINSTALL)?;
     for (name, value) in [
-        ("DisplayName", "Claude 网络守卫".into()),
+        ("DisplayName", "Melian".into()),
         ("DisplayVersion", VERSION.into()),
-        ("Publisher", "ClaudeGuard Local".into()),
+        ("Publisher", "Melian".into()),
         (
             "InstallLocation",
             install_dir().to_string_lossy().into_owned(),
@@ -238,6 +273,7 @@ pub fn register() -> Result<()> {
     Ok(())
 }
 pub fn unregister() -> Result<()> {
+    crate::browser::unregister()?;
     crate::desktop::unregister()?;
     set_auto_start(false)?;
     set_path(false)?;

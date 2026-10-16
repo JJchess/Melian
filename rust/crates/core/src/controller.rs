@@ -6,7 +6,11 @@ use hyper::{body::Bytes, Request};
 use hyper_util::rt::TokioIo;
 use serde_json::{json, Value};
 use std::time::Duration;
+#[cfg(windows)]
 use tokio::net::windows::named_pipe::ClientOptions;
+#[cfg(unix)]
+#[path = "controller_unix.rs"]
+mod unix;
 
 #[async_trait]
 pub trait Controller: Send + Sync {
@@ -19,8 +23,11 @@ pub trait CountryProbe: Send + Sync {
 }
 pub struct Mihomo {
     pub pipe: String,
+    #[cfg(unix)]
+    endpoint: tokio::sync::Mutex<Option<unix::Endpoint>>,
 }
 impl Mihomo {
+    #[cfg(windows)]
     pub fn new(name: &str) -> Result<Self> {
         let name = name.strip_prefix(r"\\.\pipe\").unwrap_or(name);
         if name.is_empty() || name.contains(['\\', '/']) {
@@ -30,7 +37,17 @@ impl Mihomo {
             pipe: format!(r"\\.\pipe\{name}"),
         })
     }
+    #[cfg(unix)]
+    pub fn new(name: &str) -> Result<Self> {
+        Ok(Self {
+            pipe: name.into(),
+            endpoint: tokio::sync::Mutex::new(None),
+        })
+    }
     async fn request(&self, method: &str, path: &str, body: Value) -> Result<Value> {
+        #[cfg(unix)]
+        return unix::request(self, method, path, body).await;
+        #[cfg(windows)]
         tokio::time::timeout(Duration::from_secs(2), async {
             let pipe = loop {
                 match ClientOptions::new().open(&self.pipe) {
@@ -91,30 +108,35 @@ impl Mihomo {
 #[async_trait]
 impl Controller for Mihomo {
     async fn read(&self) -> Result<Snapshot> {
-        let (config, proxies) = tokio::try_join!(
-            self.request("GET", "/configs", Value::Null),
-            self.request("GET", "/proxies", Value::Null)
-        )?;
-        let mut snapshot = nodes::resolve(&config, &proxies)?;
-        for provider in &snapshot.providers {
-            let encoded: String = provider
-                .bytes()
-                .map(|b| {
-                    if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) {
-                        (b as char).to_string()
-                    } else {
-                        format!("%{b:02X}")
-                    }
-                })
-                .collect();
-            let value = self
-                .request("GET", &format!("/providers/proxies/{encoded}"), Value::Null)
-                .await?;
-            snapshot
-                .fingerprint
-                .push_str(&format!("|{}:{}", provider, value["updatedAt"]));
+        #[cfg(unix)]
+        return unix::read(self).await;
+        #[cfg(windows)]
+        {
+            let (config, proxies) = tokio::try_join!(
+                self.request("GET", "/configs", Value::Null),
+                self.request("GET", "/proxies", Value::Null)
+            )?;
+            let mut snapshot = nodes::resolve(&config, &proxies)?;
+            for provider in &snapshot.providers {
+                let encoded: String = provider
+                    .bytes()
+                    .map(|b| {
+                        if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) {
+                            (b as char).to_string()
+                        } else {
+                            format!("%{b:02X}")
+                        }
+                    })
+                    .collect();
+                let value = self
+                    .request("GET", &format!("/providers/proxies/{encoded}"), Value::Null)
+                    .await?;
+                snapshot
+                    .fingerprint
+                    .push_str(&format!("|{}:{}", provider, value["updatedAt"]));
+            }
+            Ok(snapshot)
         }
-        Ok(snapshot)
     }
     async fn select(&self, node: &str) -> Result<()> {
         let proxies = self.request("GET", "/proxies", Value::Null).await?;

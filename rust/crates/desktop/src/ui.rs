@@ -46,6 +46,8 @@ struct Hit {
     id: u32,
     area: windows::Win32::Graphics::Direct2D::Common::D2D_RECT_F,
     name: String,
+    status: String,
+    help: String,
     checked: Option<bool>,
 }
 struct Motion {
@@ -84,6 +86,8 @@ struct App {
     feedback: Option<(String, Instant)>,
     hook: HHOOK,
     closing: bool,
+    web_busy: bool,
+    route_failed: Option<String>,
 }
 pub fn run(host: Arc<Host>, events: UnboundedReceiver<UiEvent>) -> Result<()> {
     unsafe {
@@ -163,11 +167,13 @@ pub fn run(host: Arc<Host>, events: UnboundedReceiver<UiEvent>) -> Result<()> {
             feedback: None,
             hook: HHOOK::default(),
             closing: false,
+            web_busy: false,
+            route_failed: None,
         });
         let hwnd = CreateWindowExW(
             WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_NOREDIRECTIONBITMAP,
             w!("ClaudeGuard.Rust.Island"),
-            w!("Claude 网络守卫"),
+            w!("Melian"),
             WS_POPUP,
             anchor.0 as i32 - 70,
             anchor.1 as i32,
@@ -258,8 +264,14 @@ impl App {
             return self.collapsed_size().1;
         }
         match self.view {
-            View::Guide => 328.,
-            View::Details => 358.,
+            View::Guide => {
+                if guard_platform::browser::AUTOMATIC_ENROLLMENT_ENABLED {
+                    358.
+                } else {
+                    222.
+                }
+            }
+            View::Details => 390.,
             View::Menu => {
                 if self.problem() {
                     378.
@@ -435,6 +447,42 @@ impl App {
                 UiEvent::Show => self.open(true),
                 UiEvent::Exit => self.exit(),
                 UiEvent::Feedback(message) => self.feedback(message),
+                UiEvent::WebOpened(error) => {
+                    self.web_busy = false;
+                    if let Some(message) = error {
+                        self.feedback(message);
+                    } else {
+                        self.route_failed = None;
+                        self.collapse();
+                    }
+                }
+                UiEvent::BrowserRouteFailed(browser) => {
+                    self.web_busy = false;
+                    self.route_failed = Some(browser);
+                    self.view = View::Guide;
+                    self.expanded = true;
+                    self.animate();
+                }
+                UiEvent::BrowserSetupDone(error) => {
+                    self.web_busy = false;
+                    self.state = self.host.state();
+                    if error.is_none() {
+                        self.route_failed = None;
+                    }
+                    if let Some(message) = error {
+                        self.feedback(message);
+                    } else if !web_ready(&self.state) {
+                        self.view = View::Guide;
+                        self.expanded = true;
+                        self.animate();
+                    } else if let Err(error) = self.host.open_web() {
+                        self.feedback(error.to_string());
+                    } else if web_incomplete(&self.state) {
+                        self.feedback("已开启可用浏览器。其他浏览器可在详情中接入。".into());
+                    } else {
+                        self.collapse();
+                    }
+                }
             }
         }
         if self.closing {
@@ -448,10 +496,21 @@ impl App {
             next.reason,
             next.node,
             next.country,
-            next.desktop.reason,
+            format!(
+                "{}:{}:{}:{}:{}:{}",
+                next.desktop.reason,
+                next.desktop.installed,
+                next.desktop.configured,
+                next.desktop.connected,
+                next.desktop.running,
+                next.desktop.restart_required
+            ),
             next.browsers
                 .iter()
-                .map(|(k, b)| format!("{k}:{}:{}:{}", b.connected, b.protected, b.reason))
+                .map(|(k, b)| format!(
+                    "{k}:{}:{}:{}:{}:{}",
+                    b.configured, b.restart_required, b.connected, b.protected, b.reason
+                ))
                 .collect::<Vec<_>>()
                 .join(","),
             if self.view == View::Details {
@@ -520,9 +579,18 @@ impl App {
         self.hits.push(Hit {
             id,
             name: name.into(),
+            status: String::new(),
+            help: String::new(),
             area: rect(16., y, 216., 36.),
             checked,
         });
+    }
+    fn row_status(&mut self, id: u32, name: &str, y: f32, status: &str, help: &str) {
+        self.row(id, name, y, None);
+        if let Some(hit) = self.hits.last_mut() {
+            hit.status = status.into();
+            hit.help = help.into();
+        }
     }
     fn draw(&mut self) -> Result<()> {
         self.frame_count += 1;
@@ -537,13 +605,69 @@ impl App {
                         self.hits.push(Hit {
                             id: 6,
                             name: "查看详情".into(),
+                            status: String::new(),
+                            help: "查看网络检查结果和各入口的接入状态".into(),
                             area: rect(161., 72., 67., 24.),
                             checked: None,
                         });
+                    } else {
+                        self.hits.push(Hit {
+                            id: 6,
+                            name: "网络就绪".into(),
+                            status: String::new(),
+                            help: "网络检查通过。查看连接详情，确认各入口的接入状态。".into(),
+                            area: rect(138., 8., 72., 28.),
+                            checked: None,
+                        });
                     }
-                    self.row(11, "Claude 桌面", 52. + error_y, None);
+                    let desktop_status = desktop_label(&self.state);
+                    let desktop_help = self.state.desktop.reason.clone();
+                    self.row_status(
+                        11,
+                        "Claude 桌面",
+                        52. + error_y,
+                        desktop_status,
+                        &desktop_help,
+                    );
                     self.row(1, "Claude Code", 90. + error_y, None);
-                    self.row(2, "Claude 网页", 128. + error_y, None);
+                    let web_connected = self
+                        .state
+                        .browsers
+                        .values()
+                        .any(|b| b.connected && b.protected);
+                    let web_prepared = self.state.browsers.values().any(|b| b.configured);
+                    let web_restart = self
+                        .state
+                        .browsers
+                        .values()
+                        .any(|b| b.configured && b.restart_required);
+                    self.row_status(
+                        2,
+                        "Claude 网页",
+                        128. + error_y,
+                        if web_connected {
+                            "已接入"
+                        } else if !guard_platform::browser::AUTOMATIC_ENROLLMENT_ENABLED {
+                            "暂不可用"
+                        } else if self.route_failed.is_some() {
+                            "待重开"
+                        } else if web_ready(&self.state) {
+                            "已准备"
+                        } else if web_restart {
+                            "待应用"
+                        } else if web_prepared {
+                            "已准备"
+                        } else {
+                            "待开启"
+                        },
+                        if web_connected {
+                            "当前有已接入的浏览器，可从这里打开受保护的 Claude 网页。"
+                        } else if !guard_platform::browser::AUTOMATIC_ENROLLMENT_ENABLED {
+                            guard_platform::browser::PAUSED_REASON
+                        } else {
+                            "使用现有浏览器和登录状态，首次点击自动启用网页保护。"
+                        },
+                    );
                     self.row(
                         3,
                         "开机自启",
@@ -553,13 +677,44 @@ impl App {
                     self.row(4, "退出", 214. + error_y, None);
                 }
                 View::Guide => {
-                    self.row(7, "Edge 接入", 151., None);
-                    self.row(8, "Chrome 接入", 190., None);
-                    self.row(9, "打开扩展文件夹", 229., None);
-                    self.row(10, "返回", 281., None);
+                    if !guard_platform::browser::AUTOMATIC_ENROLLMENT_ENABLED {
+                        self.row(10, "返回", 166., None);
+                    } else if self.web_busy {
+                        self.row(10, "返回", 305., None);
+                    } else if self.state.browsers.values().any(|b| b.configured) {
+                        let mut y = 221.;
+                        if self.route_failed.is_none() && web_ready(&self.state) {
+                            self.row(9, "继续打开网页", y, None);
+                            y += 39.;
+                        }
+                        if self.state.browsers.get("edge").is_some_and(|b| {
+                            b.configured
+                                && (b.restart_required
+                                    || self.route_failed.as_deref() == Some("edge"))
+                        }) {
+                            self.row(7, "重开 Edge 并继续", y, None);
+                            y += 39.;
+                        }
+                        if self.state.browsers.get("chrome").is_some_and(|b| {
+                            b.configured
+                                && (b.restart_required
+                                    || self.route_failed.as_deref() == Some("chrome"))
+                        }) {
+                            self.row(8, "重开 Chrome 并继续", y, None);
+                            y += 39.;
+                        }
+                        if web_incomplete(&self.state) {
+                            self.row(13, "接入其他浏览器", y, None);
+                        }
+                        self.row(10, "返回", 305., None);
+                    } else {
+                        self.row(7, "启用网页保护", 221., None);
+                        self.row(10, "返回", 305., None);
+                    }
                 }
                 View::Details => {
-                    self.row(10, "返回", 308., None);
+                    self.row(12, "管理网页保护", 292., None);
+                    self.row(10, "返回", 334., None);
                 }
             }
         }
@@ -640,9 +795,9 @@ impl App {
         );
         r.text(
             if blocked {
-                "Claude · 连接受阻"
+                "Melian · 连接受阻"
             } else {
-                "Claude"
+                "Melian"
             },
             rect(
                 header_x + 16.,
@@ -688,7 +843,6 @@ impl App {
                             a,
                             1,
                         );
-                        r.text("查看详情", rect(164., 76., 64., 17.), 0x77777f, a, 1);
                         r.rounded(rect(23., 101., 210., 32.), 10., 0x1e1e22, a);
                     }
                     r.line(
@@ -699,9 +853,70 @@ impl App {
                         1.,
                     );
                 }
+                View::Guide if !guard_platform::browser::AUTOMATIC_ENROLLMENT_ENABLED => {
+                    r.text(
+                        "网页保护暂时停用",
+                        rect(24., 45., 208., 27.),
+                        0xf4f4f5,
+                        a,
+                        2,
+                    );
+                    r.text(
+                        "正在修复校园网兼容问题。\n你的浏览器和登录状态不变。",
+                        rect(24., 86., 208., 64.),
+                        0xc8c8d0,
+                        a,
+                        1,
+                    );
+                }
                 View::Guide => {
-                    r.text("接入浏览器", rect(24., 45., 200., 27.), 0xf4f4f5, a, 2);
-                    r.text("在扩展页开启「开发者模式」。\n选择「加载解压缩的扩展」，\n加载下方文件夹，再重启浏览器。",rect(24.,79.,208.,64.),0xa2a2ad,a,1);
+                    let configured = self.state.browsers.values().any(|b| b.configured);
+                    let ready = self.route_failed.is_none() && web_ready(&self.state);
+                    r.text(
+                        if self.route_failed.is_some() {
+                            "还差一次重开"
+                        } else if ready {
+                            "网页保护已准备"
+                        } else if configured {
+                            "应用网页保护"
+                        } else {
+                            "网页保护，一次开启"
+                        },
+                        rect(24., 45., 208., 27.),
+                        0xf4f4f5,
+                        a,
+                        2,
+                    );
+                    r.text(
+                        if ready {
+                            "使用现有浏览器和登录状态。\n点击继续，会先验证连接。"
+                        } else if configured {
+                            "重开浏览器即可应用保护。\n登录和标签页会保留。"
+                        } else {
+                            "自动接入现有 Edge 和 Chrome。\n保留账号与登录状态，无需扩展。"
+                        },
+                        rect(24., 79., 208., 54.),
+                        0xc8c8d0,
+                        a,
+                        1,
+                    );
+                    r.text(if self.web_busy {
+                        "正在完成接入，请留意系统提示。"
+                    } else if self.route_failed.is_some() {
+                        "浏览器尚未应用保护规则。\n请先保存未提交的内容，\n再重开一次。"
+                    } else if configured && web_incomplete(&self.state) {
+                        "部分浏览器尚未接入。\n可在下方继续完成接入。\n重开前请保存未提交的内容。"
+                    } else if ready {
+                        if self.state.browsers.values().any(|b| b.configured && b.restart_required) {
+                            "其他浏览器可稍后重开。\n重开前请保存未提交的内容。"
+                        } else {
+                            "保护已准备好。\n其他网站继续使用原有连接方式。"
+                        }
+                    } else if configured {
+                        "请先保存未提交的内容。\n继续后自动验证并打开 Claude。"
+                    } else {
+                        "首次可能需要 Windows 授权。\n浏览器会显示「由组织管理」；\n这是守卫添加的本机代理规则，\n卸载时会自动移除。"
+                    }, rect(24.,140.,208.,76.),0x92929e,a,1);
                 }
                 View::Details => {
                     let node = if self.state.node.is_empty() {
@@ -751,7 +966,7 @@ impl App {
                             hit.area.left + inset,
                             hit.area.top + inset,
                             hit.area.right - hit.area.left - 2. * inset,
-                            36. - 2. * inset,
+                            hit.area.bottom - hit.area.top - 2. * inset,
                         ),
                         10.,
                         0xffffff,
@@ -773,12 +988,33 @@ impl App {
                     );
                     r.text(
                         &hit.name,
-                        rect(56., y, 145., 36.),
+                        rect(56., y, if hit.status.is_empty() { 145. } else { 110. }, 36.),
                         if hit.id == 4 { 0x9b9ba5 } else { 0xe9e9ef },
                         a,
                         0,
                     );
+                    if !hit.status.is_empty() {
+                        let width = hit.status.chars().count() as f32 * 11. + 2.;
+                        r.text(
+                            &hit.status,
+                            rect(226. - width, y, width, 36.),
+                            0x92929d,
+                            a,
+                            1,
+                        );
+                    }
                 } else if hit.id == 6 {
+                    r.text(
+                        &hit.name,
+                        if problem {
+                            rect(164., 76., 64., 17.)
+                        } else {
+                            rect(146., 8., 60., 28.)
+                        },
+                        0x92929d,
+                        a,
+                        1,
+                    );
                 } else {
                     r.text(
                         &hit.name,
@@ -827,6 +1063,8 @@ impl App {
                 .map(|h| Item {
                     id: h.id,
                     name: h.name.clone(),
+                    status: h.status.clone(),
+                    help: h.help.clone(),
                     checked: h.checked,
                     rect: UiaRect {
                         left: bounds.left as f64 + h.area.left as f64 * scale,
@@ -837,20 +1075,21 @@ impl App {
                 })
                 .collect();
             data.focused = self.focus;
-            data.status = self.state.reason.clone();
+            data.status = if self.state.allowed {
+                "网络检查通过。展开查看各入口的接入状态。".into()
+            } else {
+                self.state.reason.clone()
+            };
         }
     }
     fn hit(&self, lparam: LPARAM) -> u32 {
         let x = (lparam.0 as u16 as i16) as f32 / self.scale();
         let y = ((lparam.0 >> 16) as u16 as i16) as f32 / self.scale();
-        if y < 40. {
-            return 0;
-        }
         self.hits
             .iter()
             .find(|h| x >= h.area.left && x < h.area.right && y >= h.area.top && y < h.area.bottom)
             .map(|h| h.id)
-            .unwrap_or(u32::MAX)
+            .unwrap_or(if y < 40. { 0 } else { u32::MAX })
     }
     fn feedback(&mut self, text: String) {
         if self.blocked() && self.pulse_until.is_none() {
@@ -868,12 +1107,20 @@ impl App {
     }
     fn action(&mut self, id: u32) {
         self.peek_until = None;
+        if self.web_busy && matches!(id, 2 | 7 | 8 | 9 | 13) {
+            self.view = View::Guide;
+            self.expanded = true;
+            self.animate();
+            return;
+        }
         if id == 5 && self.feedback.is_some() && self.state.allowed {
             self.feedback = None;
             self.animate();
             return;
         }
-        if self.host.engine.settings().proxy_port == 0 && matches!(id, 1 | 3 | 5 | 7 | 8 | 9 | 11) {
+        if self.host.engine.settings().proxy_port == 0
+            && matches!(id, 1 | 3 | 5 | 7 | 8 | 9 | 11 | 13)
+        {
             self.feedback("界面预览模式".into());
             return;
         }
@@ -912,12 +1159,7 @@ impl App {
             2 => {
                 if !self.state.fresh_allowed() {
                     self.open(true);
-                } else if self
-                    .state
-                    .browsers
-                    .values()
-                    .any(|b| b.connected && b.protected)
-                {
+                } else if self.route_failed.is_none() && web_ready(&self.state) {
                     if let Err(e) = self.host.open_web() {
                         self.feedback(e.to_string());
                     } else {
@@ -970,20 +1212,40 @@ impl App {
                 self.view = View::Details;
                 self.animate();
             }
-            7 | 8 => {
-                if let Err(e) =
-                    integration::extension_guide(if id == 7 { "edge" } else { "chrome" })
-                {
-                    self.feedback(e.to_string());
-                }
+            7 | 8 | 13 => {
+                self.web_busy = true;
+                let restart = id != 13 && self.state.browsers.values().any(|b| b.configured);
+                let host = self.host.clone();
+                tokio::spawn(async move {
+                    let result = if restart {
+                        host.restart_browser(if id == 7 { "edge" } else { "chrome" })
+                            .await
+                    } else {
+                        host.enable_browsers().await
+                    };
+                    let error = result.err().map(|e| e.to_string());
+                    let _ = host.ui.send(if restart {
+                        UiEvent::WebOpened(error)
+                    } else {
+                        UiEvent::BrowserSetupDone(error)
+                    });
+                });
+                let _ = self.draw();
             }
             9 => {
-                if let Err(e) = integration::open_extension_folder() {
+                if let Err(e) = self.host.open_web() {
                     self.feedback(e.to_string());
+                } else {
+                    self.collapse();
                 }
             }
             10 => {
                 self.view = View::Menu;
+                self.animate();
+            }
+            12 => {
+                self.view = View::Guide;
+                self.expanded = true;
                 self.animate();
             }
             _ => {}
@@ -1010,7 +1272,7 @@ impl App {
                 hIcon: crate::icons::app_icon(GetSystemMetrics(SM_CXSMICON)).unwrap_or_default(),
                 ..Default::default()
             };
-            let tip = wide("Claude 网络守卫");
+            let tip = wide("Melian");
             data.szTip[..tip.len()].copy_from_slice(&tip);
             let _ = Shell_NotifyIconW(if add { NIM_ADD } else { NIM_DELETE }, &data);
         }
@@ -1057,21 +1319,53 @@ impl App {
         }
     }
 }
+fn web_ready(state: &State) -> bool {
+    state
+        .browsers
+        .values()
+        .any(|b| (b.connected && b.protected) || (b.configured && !b.restart_required))
+}
+fn web_incomplete(state: &State) -> bool {
+    state
+        .browsers
+        .values()
+        .any(|b| b.installed && !b.configured && !(b.connected && b.protected))
+}
 fn browser_label(state: &State, key: &str) -> String {
     state
         .browsers
         .get(key)
         .map(|b| {
-            if b.connected && b.protected {
+            if b.restart_required {
+                "待重开"
+            } else if b.connected && b.protected {
                 "已接入"
             } else if b.connected {
-                "代理冲突"
+                "未保护"
+            } else if b.configured {
+                "已准备"
             } else {
                 "未接入"
             }
             .into()
         })
         .unwrap_or_else(|| "未接入".into())
+}
+fn desktop_label(state: &State) -> &'static str {
+    let desktop = &state.desktop;
+    if desktop.restart_required {
+        "需重开"
+    } else if !desktop.installed {
+        "未安装"
+    } else if desktop.connected {
+        "已连接"
+    } else if !desktop.configured {
+        "未接入"
+    } else if !desktop.running {
+        "未运行"
+    } else {
+        "待验证"
+    }
 }
 unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code >= 0

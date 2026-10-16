@@ -16,6 +16,8 @@ use windows::{
 pub struct Item {
     pub id: u32,
     pub name: String,
+    pub status: String,
+    pub help: String,
     pub rect: UiaRect,
     pub checked: Option<bool>,
 }
@@ -73,11 +75,19 @@ impl IRawElementProviderSimple_Impl for Provider_Impl {
         let data = self.data.lock().unwrap();
         let item = data.items.iter().find(|i| i.id == self.id);
         Ok(if property == UIA_NamePropertyId {
-            VARIANT::from(if self.id == 0 {
-                "Claude 网络守卫"
+            let name = if self.id == 0 {
+                "Melian".into()
             } else {
-                item.map(|i| i.name.as_str()).unwrap_or("")
-            })
+                item.map(|i| {
+                    if i.status.is_empty() {
+                        i.name.clone()
+                    } else {
+                        format!("{}，{}", i.name, i.status)
+                    }
+                })
+                .unwrap_or_default()
+            };
+            VARIANT::from(name.as_str())
         } else if property == UIA_ControlTypePropertyId {
             VARIANT::from(if self.id == 3 {
                 UIA_CheckBoxControlTypeId.0
@@ -88,8 +98,14 @@ impl IRawElementProviderSimple_Impl for Provider_Impl {
             })
         } else if property == UIA_AutomationIdPropertyId {
             VARIANT::from(format!("ClaudeGuard.{}", self.id).as_str())
-        } else if property == UIA_HelpTextPropertyId && self.id == 0 {
-            VARIANT::from(data.status.as_str())
+        } else if property == UIA_HelpTextPropertyId {
+            VARIANT::from(if self.id == 0 {
+                data.status.as_str()
+            } else {
+                item.map(|i| i.help.as_str()).unwrap_or("")
+            })
+        } else if property == UIA_ItemStatusPropertyId {
+            VARIANT::from(item.map(|i| i.status.as_str()).unwrap_or(""))
         } else if property == UIA_IsEnabledPropertyId
             || property == UIA_IsKeyboardFocusablePropertyId
             || property == UIA_IsControlElementPropertyId

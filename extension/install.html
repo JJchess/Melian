@@ -1,13 +1,20 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>安装与帮助 · Claude 网络守卫</title><link rel="stylesheet" href="ui.css"></head><body class="page"><main>
-<header><span class="brand-dot"></span><strong>CLAUDE GUARD</strong><span class="tag">浏览器接入指南</span></header>
-<p class="eyebrow">首次使用 · 约 2 分钟</p><h1>连接你的浏览器</h1>
-<p>桌面应用检查 Clash 全局代理、所用节点和代理 IP 属地；扩展将 Claude 请求交给本机守卫。Chrome 与 Edge 需要分别安装，原有浏览器登录状态继续保留。</p>
-<ol><li>先运行 Claude 网络守卫安装程序，并启动桌面应用。</li><li>Edge 打开 <code>edge://extensions</code>；Chrome 打开 <code>chrome://extensions</code>。</li><li>开启「开发人员模式」，选择「加载解压缩的扩展」，选择安装目录下的 <code>extension</code> 文件夹。默认目录为 <code>%LOCALAPPDATA%\Programs\ClaudeGuard\extension</code>；请以安装器实际位置为准。</li><li>将扩展固定到工具栏，打开扩展弹窗。确认没有代理冲突；Clash 运行于全局模式且代理 IP 属地确认为美国后，显示绿色「检查通过 · 已放行」。</li><li><strong>完全退出并重新打开浏览器</strong>，以关闭安装前已经建立的连接。关闭全部窗口后，也需确认浏览器后台进程已退出。</li><li>在另一个浏览器重复以上步骤。多个浏览器用户配置也需要各自安装。</li></ol>
-<p class="warning">扩展 ID 应为 <code>lgfobljoiaojjljlgpfhdaahppgdafkd</code>。加载目录中的 manifest.json 必须保留原公钥；固定 ID 才能连接本机桥接程序。</p>
-<h3>连接如何受到保护</h3><p><code>claude.ai</code>、<code>claude.com</code>、<code>anthropic.com</code> 及其子域固定使用本机守卫，无直连后备。应用关闭、验证过期或网络状态不满足要求时，请求会失败。扩展后台休眠后，浏览器代理规则仍然保留。</p>
-<p>其他网站跟随 Windows 当前的静态系统代理或直连设置。扩展每秒同步桌面程序提供的设置；不支持自动配置 PAC、自动检测或无法准确转换的绕过规则，遇到这些设置会阻断 Claude 并显示原因。扩展不解密 HTTPS，不读取页面内容或登录凭据。</p>
-<h3>常见问题</h3><ul><li><strong>本机桥接未连接：</strong>先启动桌面应用，再重开浏览器；仍失败可重新运行安装器修复 Native Messaging 注册。</li><li><strong>其他代理扩展接管：</strong>停用该浏览器配置中的代理扩展，再点击重新检查。企业策略锁定时需由管理员调整。</li><li><strong>桌面绿色，但网页失败：</strong>检查扩展弹窗，确认当前浏览器已接入；然后重试。网站或上游网络故障也会显示连接暂停页。</li><li><strong>Clash 尚未启动：</strong>守卫会保持阻断。守卫开机自启不会替你启用 Clash 自启。</li></ul>
-<h3>保护边界</h3><p>扩展停用、卸载、未安装扩展的浏览器配置及其他浏览器不受本扩展保护。首版不支持无痕模式，禁止将无痕窗口作为受保护入口。状态检测有约 1～2 秒窗口，不能保证网络变化瞬间没有请求通过。其他域名和第三方登录站点不在浏览器域名保护清单中。</p>
-<h3>卸载</h3><p>在两个浏览器的扩展管理页移除「Claude 网络守卫」，浏览器会恢复剩余有效代理设置；再从 Windows「已安装的应用」卸载桌面程序。桌面程序先卸载而扩展仍启用时，Claude 请求会继续失败，直到移除扩展。</p>
-<p class="footnote">本扩展无需上传数据，也不包含远程脚本。只与当前用户安装的本机桥接程序通信。</p>
-</main></body></html>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>网页保护 · Melian</title>
+  <link rel="stylesheet" href="ui.css">
+</head>
+<body class="page">
+<main>
+  <header><span class="brand-dot"></span><strong>MELIAN</strong><span class="tag">网页保护</span></header>
+  <h1>网页保护暂时停用</h1>
+  <p>正在修复关闭 VPN 后可能影响校园网等其他网站的问题。自动接入入口已关闭，浏览器原有账号和登录资料会保留。</p>
+  <p>目前无需安装扩展、创建新浏览器配置或重新登录。修复并完成网络切换验证后，再恢复接入。</p>
+  <h3>已有旧版扩展</h3>
+  <p>若你曾手动安装旧版扩展，可在 Edge 或 Chrome 的扩展管理页禁用或移除 Melian（旧名 Claude 网络守卫）。它不作为本次网络兼容问题的已验证修复方案。</p>
+  <p class="footnote">绿色胶囊只表示网络检查通过；网页入口的接入情况单独显示。</p>
+</main>
+</body>
+</html>

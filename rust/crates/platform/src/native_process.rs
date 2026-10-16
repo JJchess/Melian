@@ -126,7 +126,10 @@ pub fn spawn(path: &Path, args: &[String]) -> Result<Child> {
         let policy_helper = args.iter().any(|a| {
             matches!(
                 a.as_str(),
-                "--desktop-proxy-enable" | "--desktop-proxy-remove"
+                "--desktop-proxy-enable"
+                    | "--desktop-proxy-remove"
+                    | "--browser-proxy-enable"
+                    | "--browser-proxy-remove"
             )
         });
         principal.SetRunLevel(if policy_helper && IsUserAnAdmin().as_bool() {

@@ -4,10 +4,8 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 [dependencies]
-winreg = "0.55"
 guard-protocol.workspace = true
 anyhow.workspace = true
-windows.workspace = true
 tokio.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
@@ -15,3 +13,13 @@ guard-core.workspace = true
 uuid.workspace = true
 tokio-util.workspace = true
 serde.workspace = true
+sha2.workspace = true
+hex.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+windows.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
+plist = "1"

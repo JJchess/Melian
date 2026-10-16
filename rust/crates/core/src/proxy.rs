@@ -1,8 +1,8 @@
 use crate::gate::{Gate, Permit};
+use crate::web_probe::{ProbeRequest, WebProbe};
 use anyhow::{bail, Context, Result};
 use std::{
     net::{Ipv4Addr, SocketAddr},
-    os::windows::io::AsRawSocket,
     sync::Arc,
     time::Duration,
 };
@@ -16,6 +16,7 @@ pub struct Proxy {
     listener: TcpListener,
     gate: Arc<Gate>,
     stop: CancellationToken,
+    web_probe: Arc<WebProbe>,
 }
 impl Proxy {
     pub fn bind(port: u16, gate: Arc<Gate>, stop: CancellationToken) -> Result<Self> {
@@ -24,21 +25,26 @@ impl Proxy {
             socket2::Type::STREAM,
             Some(socket2::Protocol::TCP),
         )?;
-        use windows::Win32::Networking::WinSock::{
-            setsockopt, SOCKET, SOL_SOCKET, SO_EXCLUSIVEADDRUSE,
-        };
-        unsafe {
-            let value = 1i32.to_ne_bytes();
-            if setsockopt(
-                SOCKET(socket.as_raw_socket() as usize),
-                SOL_SOCKET,
-                SO_EXCLUSIVEADDRUSE,
-                Some(&value),
-            ) != 0
-            {
-                bail!("无法独占代理端口");
+        #[cfg(windows)]
+        {
+            use std::os::windows::io::AsRawSocket;
+            use windows::Win32::Networking::WinSock::{
+                setsockopt, SOCKET, SOL_SOCKET, SO_EXCLUSIVEADDRUSE,
+            };
+            unsafe {
+                let value = 1i32.to_ne_bytes();
+                if setsockopt(
+                    SOCKET(socket.as_raw_socket() as usize),
+                    SOL_SOCKET,
+                    SO_EXCLUSIVEADDRUSE,
+                    Some(&value),
+                ) != 0
+                {
+                    bail!("无法独占代理端口");
+                }
             }
         }
+        // Unix sockets are exclusive by default; never enable SO_REUSEPORT.
         socket.bind(&SocketAddr::from((Ipv4Addr::LOCALHOST, port)).into())?;
         socket.listen(128)?;
         socket.set_nonblocking(true)?;
@@ -47,7 +53,12 @@ impl Proxy {
             listener,
             gate,
             stop,
+            web_probe: Arc::new(WebProbe::default()),
         })
+    }
+    pub fn with_web_probe(mut self, probe: Arc<WebProbe>) -> Self {
+        self.web_probe = probe;
+        self
     }
     pub fn port(&self) -> u16 {
         self.listener.local_addr().unwrap().port()
@@ -58,8 +69,8 @@ impl Proxy {
                 _=self.stop.cancelled()=>break,
                 next=self.listener.accept()=>match next {
                     Ok((client,_))=>{
-                        let gate=self.gate.clone(); let stop=self.stop.clone();
-                        tokio::spawn(async move { tokio::select! { _=stop.cancelled()=>{}, _=serve(client,gate)=>{} } });
+                        let gate=self.gate.clone(); let stop=self.stop.clone(); let probe=self.web_probe.clone();
+                        tokio::spawn(async move { tokio::select! { _=stop.cancelled()=>{}, _=serve(client,gate,probe)=>{} } });
                     },
                     Err(_)=>{ self.gate.revoke(); break; }
                 }
@@ -144,9 +155,9 @@ pub fn sanitize_header(bytes: &[u8]) -> Result<(bool, Vec<u8>)> {
     sanitized.push_str("\r\n");
     Ok((connect, sanitized.into_bytes()))
 }
-async fn serve(mut client: TcpStream, gate: Arc<Gate>) {
+async fn serve(mut client: TcpStream, gate: Arc<Gate>, probe: Arc<WebProbe>) {
     let Some(permit) = gate.permit() else {
-        let _=client.write_all(b"HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n").await;
+        let _=client.write_all(b"HTTP/1.1 503 Service Unavailable\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nConnection: close\r\nContent-Length: 0\r\n\r\n").await;
         return;
     };
     let Ok((tracked, client_handle)) = track_socket(client, &gate, &permit) else {
@@ -158,10 +169,14 @@ async fn serve(mut client: TcpStream, gate: Arc<Gate>) {
     tokio::select! {
         _=revoked.cancelled()=>{},
         _=async {
-            let handshake=tokio::time::timeout(Duration::from_secs(10),handshake(&mut client,&gate,&permit)).await;
-            if let Ok(Ok((mut upstream,_upstream_handle)))=handshake {
-                if gate.current(&permit) { let _=tokio::io::copy_bidirectional(&mut client,&mut upstream).await; }
-            } else { let _=client.write_all(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\nContent-Length: 0\r\n\r\n").await; }
+            let handshake=tokio::time::timeout(Duration::from_secs(10),handshake(&mut client,&gate,&permit,&probe)).await;
+            match handshake {
+                Ok(Ok(Handshake::Upstream(mut upstream,_upstream_handle)))=> {
+                    if gate.current(&permit) { let _=tokio::io::copy_bidirectional(&mut client,&mut upstream).await; }
+                }
+                Ok(Ok(Handshake::LocalResponse))=>{},
+                _=> { let _=client.write_all(b"HTTP/1.1 502 Bad Gateway\r\nConnection: close\r\nContent-Length: 0\r\n\r\n").await; }
+            }
         }=>{}
     }
 }
@@ -177,15 +192,33 @@ fn track_socket(
     }
     Ok((TcpStream::from_std(stream)?, handle))
 }
+enum Handshake {
+    Upstream(TcpStream, Arc<std::net::TcpStream>),
+    LocalResponse,
+}
 async fn handshake(
     client: &mut TcpStream,
     gate: &Gate,
     permit: &Permit,
-) -> Result<(TcpStream, Arc<std::net::TcpStream>)> {
+    probe: &WebProbe,
+) -> Result<Handshake> {
     let (bytes, extra) = header(client).await?;
     let (connect, sanitized) = sanitize_header(&bytes)?;
     if !gate.current(permit) {
         bail!("已阻断");
+    }
+    match probe.consume_request(&sanitized, gate, permit) {
+        ProbeRequest::Other => {}
+        ProbeRequest::NotFound => {
+            let _ = client.write_all(b"HTTP/1.1 404 Not Found\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nConnection: close\r\nContent-Length: 0\r\n\r\n").await;
+            return Ok(Handshake::LocalResponse);
+        }
+        ProbeRequest::Redirect(receipt) => {
+            if gate.current(permit) && client.write_all(b"HTTP/1.1 302 Found\r\nLocation: https://claude.ai/\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nConnection: close\r\nContent-Length: 0\r\n\r\n").await.is_ok() {
+                probe.acknowledge(receipt, gate, permit);
+            }
+            return Ok(Handshake::LocalResponse);
+        }
     }
     let upstream = TcpStream::connect((Ipv4Addr::LOCALHOST, permit.port)).await?;
     let (mut upstream, handle) = track_socket(upstream, gate, permit)?;
@@ -214,5 +247,5 @@ async fn handshake(
         bail!("已阻断");
     }
     upstream.write_all(&extra).await?;
-    Ok((upstream, handle))
+    Ok(Handshake::Upstream(upstream, handle))
 }

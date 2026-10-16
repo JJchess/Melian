@@ -10,7 +10,7 @@ async fn main() {
     let code = match result {
         Ok(code) => code,
         Err(e) => {
-            eprintln!("Claude 网络守卫：{e}");
+            eprintln!("Melian：{e}");
             2
         }
     };
@@ -27,14 +27,16 @@ async fn run(mut args: Vec<String>) -> Result<i32> {
         return bridge::run().await;
     }
     if args.first().is_some_and(|s| s == "--guard-help") {
-        println!("claude-guard [--cwd 目录] [--] Claude Code 参数\n--desktop 打开 Claude 桌面\n--status  --recheck  --show  --open-web\n桌面接入需要新版官方 MSIX 安装；Code 命令仅支持 Windows 前台会话。");
+        println!("claude-guard [--cwd 目录] [--] Claude Code 参数\n--desktop 打开 Claude 桌面\n--status  --recheck  --show  --open-web\nCode 入口支持 Windows / macOS 前台会话；客户端保护范围见使用说明。");
         return Ok(0);
     }
     if let Some(action) = args.first().and_then(|s| match s.as_str() {
         "--status" => Some("status"),
         "--recheck" => Some("recheck"),
         "--show" => Some("show"),
+        "--quit" => Some("exit"),
         "--open-web" => Some("openWeb"),
+        "--enable-web" => Some("enableBrowsers"),
         "--desktop" => Some("launchDesktop"),
         _ => None,
     }) {
@@ -74,12 +76,14 @@ async fn run(mut args: Vec<String>) -> Result<i32> {
     let mut command =
         launch::claude_command(std::path::Path::new(&path), &cwd, &args, state.proxy_port);
     let mut child = command.spawn()?;
+    #[cfg(windows)]
     unsafe {
         let _ = windows::Win32::System::Console::SetConsoleCtrlHandler(Some(console_signal), true);
     }
     let status = child.wait()?;
     Ok(status.code().unwrap_or(1))
 }
+#[cfg(windows)]
 unsafe extern "system" fn console_signal(signal: u32) -> windows::Win32::Foundation::BOOL {
     // Claude receives the same console signal. Keep the launcher alive to return its exit code.
     (signal == 0 || signal == 1).into()

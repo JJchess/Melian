@@ -9,6 +9,13 @@ if(-not (Test-Path -LiteralPath $cargo)){$cargo='cargo'}
 # Use an existing MSVC installation or the verified local tool cache.
 $link=Get-Command link.exe -ErrorAction SilentlyContinue
 $msvcRoot=$null
+if(-not $link){
+    $vswhere=Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+    if(Test-Path -LiteralPath $vswhere){
+        $installation=& $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+        if($installation){$toolset=Get-ChildItem (Join-Path $installation 'VC/Tools/MSVC') -Directory | Sort-Object Name -Descending | Select-Object -First 1; if($toolset){$msvcRoot=$toolset.FullName}}
+    }
+}
 if($link){$msvcRoot=Split-Path (Split-Path (Split-Path (Split-Path $link.Source -Parent) -Parent) -Parent) -Parent}
 if(-not $msvcRoot -or -not (Test-Path -LiteralPath (Join-Path $msvcRoot 'lib\x64'))){
     $cached=Get-ChildItem (Join-Path $rustRoot '.tools\msvc\Contents\VC\Tools\MSVC') -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
@@ -47,8 +54,9 @@ try{
     $env:CLAUDE_GUARD_PAYLOAD=$zip
     Run-Cargo @('build','--release','--locked','-p','guard-setup')
     Copy-Item -LiteralPath (Join-Path $rustRoot 'target\release\guard-setup.exe') -Destination (Join-Path $dist 'ClaudeGuard.Setup.exe') -Force
+    Copy-Item -LiteralPath (Join-Path $dist 'ClaudeGuard.Setup.exe') -Destination (Join-Path $dist 'Melian.Setup.exe') -Force
     $check=Start-Process -FilePath (Join-Path $dist 'ClaudeGuard.Setup.exe') -ArgumentList '--check-payload','--quiet' -WindowStyle Hidden -Wait -PassThru
     if($check.ExitCode -ne 0){throw 'Installer payload verification failed'}
-    Write-Output ('Installer: '+(Join-Path $dist 'ClaudeGuard.Setup.exe'))
+    Write-Output ('Installer: '+(Join-Path $dist 'Melian.Setup.exe'))
 }finally{Remove-Item Env:CLAUDE_GUARD_PAYLOAD -ErrorAction SilentlyContinue;Pop-Location}
 

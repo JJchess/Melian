@@ -48,7 +48,7 @@ async function publish() {
     chrome.storage.session.set({ view: current }),
     chrome.action.setBadgeText({ text: labels[current.status] || '停' }),
     chrome.action.setBadgeBackgroundColor({ color: colors[current.status] || colors.blocked }),
-    chrome.action.setTitle({ title: 'Claude 网络守卫 · ' + current.reason })
+    chrome.action.setTitle({ title: 'Melian · ' + current.reason })
   ]);
 }
 
@@ -60,6 +60,20 @@ async function synchronize() {
     return;
   }
   const captured = snapshot;
+  const native = captured.state?.browsers?.[browser];
+  if (native?.connectionKind === 'native' && native.configured && native.proxyFingerprint) {
+    const actual = await getProxy();
+    const url = actual.value?.pacScript?.url;
+    const digest = typeof url === 'string'
+      ? Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(url))))
+          .map(b => b.toString(16).padStart(2, '0')).join('') : '';
+    confirmed = actual.levelOfControl === 'not_controllable' && actual.value?.mode === 'pac_script' &&
+      actual.value?.pacScript?.mandatory === true && digest === native.proxyFingerprint;
+    proxyReason = confirmed ? '' : '正在等待浏览器应用保护；首次请从守卫中重开浏览器';
+    await emergencyBlock(!confirmed || !connected());
+    await publish();
+    return;
+  }
   let pac;
   try { pac = buildPac(captured.systemProxy, captured.state?.proxyPort || 17890); }
   catch (error) {
@@ -137,7 +151,7 @@ function startBridge() {
     const nativeError = chrome.runtime.lastError?.message;
     if (port !== nativePort) return;
     nativePort = null; lastMessageAt = 0; confirmed = false;
-    bridgeReason = nativeError ? '本机桥接未连接，请启动或修复安装 Claude 网络守卫' : '桌面守卫已断开；Claude 访问保持阻断';
+    bridgeReason = nativeError ? '本机桥接未连接，请启动或修复安装 Melian' : '桌面守卫已断开；Claude 访问保持阻断';
     sync(); scheduleReconnect();
   });
   post({ action: 'browserStatus', browser, connected: true, protected: false, reason: '正在确认守卫代理' });

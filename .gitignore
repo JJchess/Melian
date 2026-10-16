@@ -7,6 +7,7 @@ tests/extension-tests/.smoke-profile-*/
 rust/target/
 rust/.tools/
 rust/dist/
+rust/dist-macos.*/
 
 # Browser-generated data and local verification output.
 extension/_metadata/
@@ -24,9 +25,10 @@ tests/extension-tests/artifacts/
 # Per-user runtime data must not be committed.
 data-root.txt
 desktop-proxy.json
+browser-proxy-*.json
 settings.json
 .env
 .env.*
 
 # Packaging uses temporary source directories inside release/.
-/release/**/.source-*/
+/release/

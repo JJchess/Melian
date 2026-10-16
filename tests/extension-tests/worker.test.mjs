@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
+import { webcrypto, createHash } from 'node:crypto';
 
 function event() { const listeners = []; return { addListener: fn => listeners.push(fn), fire: (...args) => listeners.forEach(fn => fn(...args)) }; }
 async function flush() { for (let n = 0; n < 25; n++) await new Promise(resolve => setImmediate(resolve)); }
@@ -30,7 +31,7 @@ async function worker(existingProxy = { levelOfControl: 'controllable_by_this_ex
     alarms: { create: async () => {}, onAlarm: event() },
     tabs: { create: async value => { openedTabs.push(value); }, update: async () => {} }, webNavigation: { onErrorOccurred: event() }
   };
-  const context = vm.createContext({ chrome, navigator: { userAgent: 'Chrome/140 Edg/140' }, URL, console,
+  const context = vm.createContext({ chrome, navigator: { userAgent: 'Chrome/140 Edg/140' }, URL, console, crypto: webcrypto, TextEncoder,
     setTimeout: fn => { timers.push(fn); return timers.length; }, clearTimeout: () => {}, setInterval: fn => { timers.push(fn); return timers.length; } });
   const pac = new vm.SourceTextModule(await readFile(new URL('../../extension/pac.mjs', import.meta.url), 'utf8'), { context });
   const background = new vm.SourceTextModule(await readFile(new URL('../../extension/background.mjs', import.meta.url), 'utf8'), { context });
@@ -97,4 +98,16 @@ test('desktop open command is rejected for blocked/checking status, proxy confli
   await w.status({ command: 'openClaude', systemProxy: { supported: false } });
   await w.conflict(); await w.status({ command: 'openClaude' });
   assert.equal(w.openedTabs.length, 0);
+});
+
+test('native policy is accepted only when the browser reports the exact owned mandatory PAC', async () => {
+  const url = 'data:application/x-ns-proxy-autoconfig,test-owned-policy';
+  const w = await worker({levelOfControl:'not_controllable', value:{mode:'pac_script', pacScript:{url, mandatory:true}}});
+  const native = {connectionKind:'native', configured:true, proxyFingerprint:createHash('sha256').update(url).digest('hex')};
+  await w.status({state:{browsers:{edge:{...native, proxyFingerprint:'wrong'}}}});
+  assert.equal(w.view.protected, false); assert.ok(w.rules.includes('bootstrap_block'));
+  await w.status({state:{browsers:{edge:native}}});
+  for (let i = 0; i < 40 && !w.view.protected; i++) await new Promise(r => setTimeout(r, 5));
+  assert.equal(w.view.protected, true); assert.deepEqual(w.rules, []);
+  assert.ok(!w.events.includes('setProxy'));
 });

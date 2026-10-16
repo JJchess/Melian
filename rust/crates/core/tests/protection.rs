@@ -1,7 +1,9 @@
 use anyhow::{bail, Result};
 use async_trait::async_trait;
+#[cfg(windows)]
+use guard_core::controller::Mihomo;
 use guard_core::{
-    controller::{Controller, CountryProbe, Mihomo},
+    controller::{Controller, CountryProbe},
     engine::remaining_lease,
     nodes::{resolve, Snapshot},
     proxy::{sanitize_header, Proxy},
@@ -206,6 +208,7 @@ fn rejects_bad_requests() {
     }
 }
 #[tokio::test]
+#[cfg(windows)]
 async fn mihomo_named_pipe() {
     use tokio::net::windows::named_pipe::ServerOptions;
     let name = format!("ClaudeGuard-Test-{}", std::process::id());
@@ -245,6 +248,7 @@ async fn mihomo_named_pipe() {
     task.await.unwrap();
 }
 #[tokio::test]
+#[cfg(windows)]
 async fn missing_and_stalled_controller_have_distinct_reasons() {
     use tokio::net::windows::named_pipe::ServerOptions;
     let name = format!("ClaudeGuard-Errors-{}", std::process::id());

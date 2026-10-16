@@ -46,7 +46,9 @@ impl Settings {
         if value.proxy_port < 1024 {
             value.proxy_port = 17890;
         }
-        if value.mihomo_pipe_name.is_empty() || value.mihomo_pipe_name.contains('/') {
+        if value.mihomo_pipe_name.is_empty()
+            || (cfg!(windows) && value.mihomo_pipe_name.contains('/'))
+        {
             value.mihomo_pipe_name = "verge-mihomo".into();
         }
         value
@@ -80,14 +82,31 @@ pub fn atomic_replace(source: &std::path::Path, destination: &std::path::Path) -
     Ok(())
 }
 pub fn wide(value: impl AsRef<std::ffi::OsStr>) -> Vec<u16> {
-    use std::os::windows::ffi::OsStrExt;
-    value.as_ref().encode_wide().chain(Some(0)).collect()
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        value.as_ref().encode_wide().chain(Some(0)).collect()
+    }
+    #[cfg(not(windows))]
+    value
+        .as_ref()
+        .to_string_lossy()
+        .encode_utf16()
+        .chain(Some(0))
+        .collect()
 }
+#[cfg(windows)]
 pub fn install_dir() -> PathBuf {
     PathBuf::from(std::env::var_os("LOCALAPPDATA").unwrap_or_default())
         .join("Programs")
         .join("ClaudeGuard")
 }
+#[cfg(not(windows))]
+pub fn install_dir() -> PathBuf {
+    PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
+        .join("Applications/Melian.app/Contents")
+}
+#[cfg(windows)]
 pub fn settings_dir() -> PathBuf {
     if let Ok(root) = fs::read_to_string(install_dir().join("data-root.txt")) {
         let root = PathBuf::from(root.trim());
@@ -101,6 +120,11 @@ pub fn settings_dir() -> PathBuf {
         .ok()
         .and_then(|p| p.parent().map(std::path::Path::to_path_buf))
         .unwrap_or(logical)
+}
+#[cfg(not(windows))]
+pub fn settings_dir() -> PathBuf {
+    PathBuf::from(std::env::var_os("HOME").unwrap_or_default())
+        .join("Library/Application Support/Melian")
 }
 /// Pins the existing writable profile layer across installer, scheduled login,
 /// and browser launches. No package identity or machine-specific path is assumed.
@@ -127,10 +151,20 @@ pub fn settings_file() -> PathBuf {
     settings_dir().join("settings.json")
 }
 pub fn desktop_exe() -> PathBuf {
-    install_dir().join("ClaudeGuard.exe")
+    #[cfg(windows)]
+    {
+        install_dir().join("ClaudeGuard.exe")
+    }
+    #[cfg(not(windows))]
+    install_dir().join("MacOS/ClaudeGuard")
 }
 pub fn cli_exe() -> PathBuf {
-    install_dir().join("cli").join("claude-guard.exe")
+    #[cfg(windows)]
+    {
+        install_dir().join("cli").join("claude-guard.exe")
+    }
+    #[cfg(not(windows))]
+    install_dir().join("MacOS/claude-guard")
 }
 pub fn pipe_name() -> String {
     let identity = format!(
@@ -144,7 +178,18 @@ pub fn pipe_name() -> String {
     )
 }
 pub fn pipe_path() -> String {
-    format!(r"\\.\pipe\{}", pipe_name())
+    #[cfg(windows)]
+    {
+        format!(r"\\.\pipe\{}", pipe_name())
+    }
+    #[cfg(unix)]
+    {
+        std::env::temp_dir()
+            .join("melian")
+            .join("control.sock")
+            .to_string_lossy()
+            .into_owned()
+    }
 }
 pub fn log(message: &str) {
     let _lock = FILE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -167,6 +212,12 @@ pub fn log(message: &str) {
 #[serde(default, rename_all = "camelCase")]
 pub struct BrowserState {
     pub browser: String,
+    pub installed: bool,
+    pub configured: bool,
+    pub restart_required: bool,
+    pub connection_kind: String,
+    pub proxy_fingerprint: String,
+    pub policy_revision: String,
     pub connected: bool,
     pub protected: bool,
     pub reason: String,
