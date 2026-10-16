@@ -1,12 +1,12 @@
 # Melian 中文使用指南
 
-2.2 开发版 · Windows 11 x64 · Rust 原生桌面应用
+2.2 · Windows 11 x64 · Rust 原生桌面应用
 
-本文描述本地 2.2 开发版。2.2 程序改动尚未合入仓库，已提交的程序源码仍为 2.1；旧版界面、快捷方式与构建产物仍使用 Claude 网络守卫 / ClaudeGuard 名称。
+本文为 Windows 使用指南。macOS 的安装、自动发现与当前保护范围见 [Mac 指南](../docs/MACOS.md)。两平台的安装入口见 [README](../README.md)。
 
 仓库：[JJchess/Melian](https://github.com/JJchess/Melian)。原名 Claude 网络守卫；既有安装目录、数据目录、控制管道与 claude-guard 命令保留，以兼容已有设置。
 
-当前开发版已停用网页自动接入：先前方案可能在关闭 VPN 后影响校园网等其他网站。此项尚未修复，不应按旧引导重新启用。
+当前版本已停用网页自动接入：先前方案可能在关闭 VPN 后影响校园网等其他网站。此项尚未修复，不应按旧引导重新启用。
 
 ## 日常使用
 
@@ -32,7 +32,7 @@
 
 ## 安装与升级
 
-运行 **Melian.Setup.exe**。安装位置为当前用户的 %LOCALAPPDATA%\Programs\ClaudeGuard，不需要安装 .NET、WebView 或 Rust。
+在 PowerShell 中运行 `irm https://raw.githubusercontent.com/JJchess/Melian/main/install.ps1 | iex`，或下载 Release 的 **Melian-windows-x64.exe** 并打开。安装位置为当前用户的 %LOCALAPPDATA%\Programs\ClaudeGuard，不需要安装 .NET、WebView 或 Rust。
 
 新安装默认开启登录自启，关闭提示音。升级保留已有自启选择、提示音、恢复节点、Claude 程序路径与窗口位置。视觉警示始终启用，静音时仍可识别异常。
 
@@ -40,7 +40,7 @@
 
 安装器先解压、检查新版，再停止守卫及其 Native Messaging 桥接。它不结束浏览器、终端、前台 CLI 或 Claude 子进程。旧安装保留为 Programs 目录中的 ClaudeGuard.rollback-*；配置备份位于 %APPDATA%\ClaudeGuard\backups。升级失败时恢复旧程序与配置。
 
-可使用 Melian.Setup.exe --quiet 安静安装；--uninstall 卸载。卸载自动移除本应用创建且仍归本应用所有的浏览器和 Desktop 代理规则；重开这些程序后，恢复继承原有代理设置。若曾安装旧版配套扩展，还需从浏览器扩展页移除。卸载保留用户配置与日志，不主动清除历史回退归档。
+可使用安装器的 --quiet 参数安静安装；--uninstall 卸载。卸载自动移除本应用创建且仍归本应用所有的浏览器和 Desktop 代理规则；重开这些程序后，恢复继承原有代理设置。若曾安装旧版配套扩展，还需从浏览器扩展页移除。卸载保留用户配置与日志，不主动清除历史回退归档。
 
 ## 网页保护状态
 
@@ -118,12 +118,12 @@ claude-guard --cwd "D:\Projects\my-app" -- --resume
 
 守卫与代理助手通过当前用户的一次性 Windows 任务启动，防止从打包应用打开安装器时，代理注册表值被写进隔离副本而目标程序无法读取。临时任务没有定时触发器，启动确认后立即删除，不改变登录自启开关。接入记录 desktop-proxy.json 和 browser-proxy-*.json 保存规则的归属，不包含会话数据。
 
-正式构建入口为根目录 build.ps1，调用 rust/build.ps1。产品代码全部为 Rust；可选浏览器扩展的 API 适配保留 JavaScript。源码包含 Cargo.lock，构建时运行 cargo test --workspace 和扩展测试。
+Windows 正式构建入口为 `rust/build.ps1`，macOS 为 `rust/build-macos.sh`。产品代码全部为 Rust；可选浏览器扩展的 API 适配保留 JavaScript。源码包含 Cargo.lock，构建时运行 cargo test --workspace 和扩展测试。
 
 构建需要 Rust stable MSVC、MSVC x64 构建工具、Windows SDK、Node.js。UI 使用 windows-rs 调用 Win32、Direct2D、DirectWrite、DirectComposition；异步网络采用 Tokio。C 运行库静态链接。
 
-在 Visual Studio 的 x64 Native Tools / Developer PowerShell 中执行根目录 `./build.ps1`。本地 2.2 开发版输出为 `rust/dist/Melian.Setup.exe`；仓库当前 `main` 的 2.1 源码输出仍为 `rust/dist/ClaudeGuard.Setup.exe`。构建脚本也支持本机已有的 `.tools` 工具缓存，但源码包不分发 Microsoft 工具链；在其他电脑上请先正常安装上述构建依赖。
+在 Visual Studio 的 x64 Native Tools / Developer PowerShell 中执行 `./rust/build.ps1`，输出为 `rust/dist/Melian.Setup.exe`；CI 发布时统一命名为 `Melian-windows-x64.exe`。构建脚本也支持本机已有的 `.tools` 工具缓存，但源码包不分发 Microsoft 工具链；在其他电脑上请先正常安装上述构建依赖。
 
-旧 .NET 安装器及源码位于 rollback-dotnet，未进入 Rust 安装包。
+旧二进制与本机临时验收脚本不再进入源码仓库。构建、安装与发布脚本按实际用途保留；历史 .NET 回退归档只保存在原开发环境。
 
-历史测试结果与待验证项目见随包的 `VALIDATION.md`；2.2 开发版另见源码中的 `rust/BROWSER-INCIDENT.md`。新自启方案的真实重启登录、校园网复测、实际多屏与睡眠恢复、内置 Code / Cowork 任务仍待验证；功能说明不替代实机验收记录。
+历史测试结果与待验证项目见随包的 `VALIDATION.md`；网页事故记录另见源码中的 `rust/BROWSER-INCIDENT.md`。新自启方案的真实重启登录、校园网复测、实际多屏与睡眠恢复、内置 Code / Cowork 任务仍待验证；功能说明不替代实机验收记录。

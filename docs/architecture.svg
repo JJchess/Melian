@@ -38,7 +38,7 @@
     <rect x="360" y="246" width="240" height="100" rx="18" fill="#15221c" stroke="#65957a"/>
     <g text-anchor="middle">
       <text x="145" y="233" fill="#edf2ef" font-size="20" font-weight="600">Claude Desktop</text>
-      <text x="145" y="259" fill="#a6b8ae" font-size="15">已接入的客户端</text>
+      <text x="145" y="259" fill="#a6b8ae" font-size="15">Windows · 已接入</text>
       <text x="145" y="349" fill="#edf2ef" font-size="20" font-weight="600">Claude Code</text>
       <text x="145" y="375" fill="#a6b8ae" font-size="15">经 claude-guard 启动</text>
       <text x="480" y="287" fill="#e6f2eb" font-size="22" font-weight="600">本机代理</text>

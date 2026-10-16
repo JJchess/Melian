@@ -5,6 +5,3 @@
 *.png binary
 *.sh text eol=lf
 *.icns binary
-
-# Preserve published checksums on every platform.
-release/** -text

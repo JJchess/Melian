@@ -12,6 +12,8 @@ macOS 13 及更新版本；提供 Apple 芯片与 Intel 原生构建。当前版
 
 自动尝试常见 Clash Verge Rev、ClashX / ClashX Meta、Clash Party / Mihomo Party 和独立 Mihomo 的 Unix socket、本机控制接口及配置文件。仅接受本机接口；配置中的控制密钥只在内存中使用，不记录到日志。自动发现不是对所有客户端版本的兼容承诺。
 
+兼容范围以 Clash / Mihomo 控制协议为准。仅提供系统 VPN、SOCKS 端口，或不开放兼容控制接口的客户端，无法验证全局模式与节点链，当前不会放行。
+
 无法发现时保持阻断。高级自定义可将配置文件 `mihomoPipeName` 设为 Unix socket 的绝对路径；或用 `MELIAN_CONTROLLER` 指定本机 HTTP 控制地址、`MELIAN_CONTROLLER_SECRET` 指定密钥。多个运行中的内核建议明确指定目标。
 
 ## 安装与数据
