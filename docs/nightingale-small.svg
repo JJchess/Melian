@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title description">
+  <title id="title">Melian 夜莺 · 小尺寸</title>
+  <desc id="description">用于 16 至 24 像素的夜莺，加宽翼身留白并放大轮廓。</desc>
+  <g id="nightingale" fill="currentColor" transform="translate(34 35) scale(.336) translate(-294 -148)">
+    <path id="body" d="M647 266C672 241 681 204 702 177C732 140 773 139 810 161L858 182C816 188 793 207 801 237C811 269 831 295 841 337C863 415 842 476 795 525C760 560 714 582 675 608C639 632 619 662 634 700C578 646 573 594 609 523C638 467 681 435 726 413C726 445 711 480 687 515C754 462 791 394 768 337C750 290 707 267 647 266Z"/>
+    <path id="wing" d="M294 587C378 535 425 426 507 348C560 296 615 284 652 299C695 314 719 346 717 387C685 373 654 391 621 412C533 470 448 570 294 587Z"/>
+  </g>
+</svg>

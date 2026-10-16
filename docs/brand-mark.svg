@@ -1,23 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title description">
   <title id="title">Melian</title>
-  <desc id="description">深色圆角底上的银白双拱 M，中央有一枚薄荷色四角星。</desc>
-  <defs>
-    <linearGradient id="surface" x1="0" y1="0" x2="0.8" y2="1">
-      <stop stop-color="#2d3c3d"/>
-      <stop offset="0.55" stop-color="#152021"/>
-      <stop offset="1" stop-color="#0b1012"/>
-    </linearGradient>
-    <linearGradient id="silver" x1="0" y1="0" x2="0.7" y2="1">
-      <stop stop-color="#ffffff"/>
-      <stop offset="0.55" stop-color="#e4eee9"/>
-      <stop offset="1" stop-color="#aec8bd"/>
-    </linearGradient>
-    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="1">
-      <stop stop-color="#829b91" stop-opacity="0.7"/>
-      <stop offset="1" stop-color="#4b6258" stop-opacity="0.25"/>
-    </linearGradient>
-  </defs>
-  <rect x="10" y="10" width="236" height="236" rx="57" fill="url(#surface)" stroke="url(#edge)" stroke-width="2"/>
-  <path d="M65 177V99C65 82 82 75 94 88L128 126 162 88C174 75 191 82 191 99V177" fill="none" stroke="url(#silver)" stroke-width="19" stroke-linecap="round" stroke-linejoin="round"/>
-  <path id="star" d="M128 155C130 168 134 172 147 174C134 176 130 180 128 193C126 180 122 176 109 174C122 172 126 168 128 155Z" fill="#93ddbe"/>
+  <desc id="description">炭黑圆角底上的暖白夜莺，长翼与鸟身之间留出一道弧形空隙。</desc>
+  <rect x="10" y="10" width="236" height="236" rx="55" fill="#191a1b" stroke="#363638" stroke-width="2"/>
+  <g id="nightingale" fill="#f4f0e8" transform="translate(43 43) scale(.306) translate(-294 -148)">
+    <path id="body" d="M639 276C670 251 677 209 699 178C728 138 772 138 812 165C824 172 839 172 851 178C813 181 780 203 791 239C800 267 821 293 833 337C857 414 837 474 791 521C759 555 713 578 672 603C633 629 609 661 626 702C570 644 568 590 604 520C634 465 684 424 735 398C736 440 719 477 699 503C753 449 781 391 762 339C745 292 697 270 639 276Z"/>
+    <path id="wing" d="M294 587C380 535 425 426 507 348C560 296 617 280 656 294C704 308 737 345 735 398C701 372 665 390 628 409C540 466 451 570 294 587Z"/>
+  </g>
 </svg>

@@ -1,4 +1,4 @@
-// Regenerate the Windows ICO and PNG from brand-mark.svg using an isolated Edge renderer.
+// Generate app SVG, PNG and Windows ICO from the two editable nightingale SVGs.
 // Run from the repository: node docs/generate-icons.mjs (Node.js 22+ and Edge required).
 import { spawn } from 'node:child_process';
 import { readFile, writeFile, mkdir, mkdtemp } from 'node:fs/promises';
@@ -11,7 +11,22 @@ const assets = path.join(root, 'rust/crates/desktop/assets');
 const qa = path.join(root, 'rust/dist/qa/icons');
 await mkdir(assets, { recursive: true });
 await mkdir(qa, { recursive: true });
-const source = await readFile(path.join(docs, 'brand-mark.svg'), 'utf8');
+const symbol = await readFile(path.join(docs, 'nightingale.svg'), 'utf8');
+const smallSymbol = await readFile(path.join(docs, 'nightingale-small.svg'), 'utf8');
+function appIcon(mark) {
+  const artwork = mark.match(/<g id="nightingale"[\s\S]*<\/g>/)?.[0];
+  if (!artwork) throw new Error('Nightingale SVG is missing its artwork group');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title description">
+  <title id="title">Melian</title>
+  <desc id="description">炭黑圆角底上的暖白夜莺，长翼与鸟身之间留出一道弧形空隙。</desc>
+  <rect x="10" y="10" width="236" height="236" rx="55" fill="#191a1b" stroke="#363638" stroke-width="2"/>
+  ${artwork.replace('fill="currentColor"', 'fill="#f4f0e8"')}
+</svg>
+`;
+}
+const source = appIcon(symbol);
+const smallSource = appIcon(smallSymbol);
+await writeFile(path.join(docs, 'brand-mark.svg'), source);
 const profile = await mkdtemp(path.join(qa, 'renderer-'));
 const executable = process.env.MELIAN_BROWSER || 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 const child = spawn(executable, ['--headless=new', '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-sync', '--disable-background-networking', '--remote-debugging-port=0', '--user-data-dir=' + profile, 'about:blank'], { windowsHide: true, stdio: 'ignore' });
@@ -54,10 +69,8 @@ try {
   const sizes = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256, 512];
   const frames = [];
   for (const size of sizes) {
-    let svg = source;
-    // Optical correction: stronger strokes, no one-pixel star at the smallest sizes.
-    if (size <= 24) svg = svg.replace('stroke-width="19"', 'stroke-width="23"');
-    if (size <= 20) svg = svg.replace(/<path id="star"[^>]*\/>/, '');
+    // Optical master: enlarge the silhouette and open the wing/body gap at tray sizes.
+    const svg = size <= 24 ? smallSource : source;
     const sourceUrl = 'data:image/svg+xml;base64,' + Buffer.from(svg).toString('base64');
     const result = await page.send('Runtime.evaluate', {
       expression: `(async()=>{const img=new Image();img.src=${JSON.stringify(sourceUrl)};await img.decode();const canvas=document.createElement('canvas');canvas.width=canvas.height=${size};canvas.getContext('2d').drawImage(img,0,0,${size},${size});return canvas.toDataURL('image/png')})()`,
@@ -85,7 +98,7 @@ try {
   await writeFile(path.join(docs, 'brand-mark.png'), frames.at(-1).png);
 
   const row = frames.filter(frame => [16, 24, 32, 48, 64].includes(frame.size)).map(frame => `<div><img src="${frame.dataUrl}" width="${frame.size}" height="${frame.size}"><small>${frame.size} px</small></div>`).join('');
-  const html = `<html><meta charset="utf-8"><style>*{box-sizing:border-box}body{margin:0;background:#f3f5f3;color:#182623;font-family:Segoe UI,Microsoft YaHei,sans-serif}main{padding:48px}header{display:flex;align-items:center;gap:48px;margin-bottom:36px}h1{font-size:52px;letter-spacing:-2px;margin:0 0 12px}p{color:#5b6c63;margin:0;font-size:17px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.card{height:170px;border-radius:20px;padding:26px;background:#fff}.dark{background:#151c1d;color:#dfeae3}.row{display:flex;gap:26px;align-items:end;height:110px}.row div{display:flex;align-items:center;flex-direction:column;gap:14px}small{font-size:12px;opacity:.6}.label{font-size:12px;letter-spacing:2px;opacity:.65}</style><main><header><img src="${frames.at(-1).dataUrl}" width="232" height="232"><div><h1>Melian</h1><p>双拱为门，星光在内。</p><p style="margin-top:12px;font-size:14px">应用图标 · 桌面 · 开始菜单 · 托盘</p></div></header><div class="grid"><section class="card"><div class="label">LIGHT</div><div class="row">${row}</div></section><section class="card dark"><div class="label">DARK</div><div class="row">${row}</div></section></div></main></html>`;
+  const html = `<html><meta charset="utf-8"><style>*{box-sizing:border-box}body{margin:0;background:#f3f5f3;color:#182623;font-family:Segoe UI,Microsoft YaHei,sans-serif}main{padding:48px}header{display:flex;align-items:center;gap:48px;margin-bottom:36px}h1{font-size:56px;font-family:Georgia,serif;font-weight:400;letter-spacing:-1px;margin:0 0 12px}p{color:#5b6c63;margin:0;font-size:17px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}.card{height:170px;border-radius:20px;padding:26px;background:#fff}.dark{background:#151c1d;color:#dfeae3}.row{display:flex;gap:26px;align-items:end;height:110px}.row div{display:flex;align-items:center;flex-direction:column;gap:14px}small{font-size:12px;opacity:.6}.label{font-size:12px;letter-spacing:2px;opacity:.65}</style><main><header><img src="${frames.at(-1).dataUrl}" width="232" height="232"><div><h1>Melian</h1><p>NIGHTINGALE / 夜莺</p><p style="margin-top:12px;font-size:14px">应用图标 · 桌面 · 开始菜单 · 托盘</p></div></header><div class="grid"><section class="card"><div class="label">LIGHT</div><div class="row">${row}</div></section><section class="card dark"><div class="label">DARK</div><div class="row">${row}</div></section></div></main></html>`;
   await writeFile(path.join(qa, 'preview.html'), html);
   await page.send('Emulation.setDeviceMetricsOverride', { width: 1000, height: 550, deviceScaleFactor: 1, mobile: false });
   await page.send('Page.enable');
