@@ -126,3 +126,32 @@ impl Gate {
         true
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sleep_cannot_extend_a_lease_or_revive_its_generation() {
+        let gate = Gate::default();
+        assert!(gate.allow(7890, Duration::from_secs(45)));
+        let permit = gate.permit().unwrap();
+        gate.0.lock().unwrap().wall_issued = SystemTime::now() - Duration::from_secs(60);
+        assert!(gate.permit().is_none());
+        assert!(gate.expire());
+        assert!(permit.revoked.is_cancelled());
+        assert!(!gate.allow(7890, Duration::from_secs(45)));
+        gate.revoke();
+        assert!(gate.allow(7890, Duration::from_secs(45)));
+        assert!(!gate.current(&permit));
+    }
+
+    #[test]
+    fn clock_moved_backwards_fails_closed() {
+        let gate = Gate::default();
+        assert!(gate.allow(7890, Duration::from_secs(45)));
+        gate.0.lock().unwrap().wall_issued = SystemTime::now() + Duration::from_secs(60);
+        assert!(gate.permit().is_none());
+        assert!(gate.expire());
+    }
+}

@@ -124,3 +124,32 @@ pub async fn send(request: Request) -> Result<Response> {
     })
     .await?
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::{json, Value};
+
+    #[tokio::test]
+    async fn messages_round_trip_with_same_user_credentials() {
+        let (mut client, mut server) = UnixStream::pair().unwrap();
+        check_peer(&client).unwrap();
+        check_peer(&server).unwrap();
+        let message = json!({"action":"launch", "args":["空格 参数", "\"quoted\"", "$(literal)"]});
+        write(&mut client, &message).await.unwrap();
+        assert_eq!(read::<Value>(&mut server).await.unwrap(), Some(message));
+        client.shutdown().await.unwrap();
+        assert!(read::<Value>(&mut server).await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn truncated_and_oversized_messages_are_rejected() {
+        let mut truncated = b"{\"action\":\"status\"}".as_slice();
+        assert!(read::<Value>(&mut truncated).await.is_err());
+        let oversized = vec![b' '; MAX_WIRE_BYTES];
+        assert!(read::<Value>(&mut oversized.as_slice()).await.is_err());
+        assert!(write(&mut tokio::io::sink(), &"x".repeat(MAX_WIRE_BYTES))
+            .await
+            .is_err());
+    }
+}

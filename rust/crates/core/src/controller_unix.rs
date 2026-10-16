@@ -235,7 +235,11 @@ pub(super) async fn request(
             if !version["version"].is_string() {
                 continue;
             }
-            let value = query(&endpoint, method, path, &body).await?;
+            let value = if path == "/version" {
+                version
+            } else {
+                query(&endpoint, method, path, &body).await?
+            };
             *selected = Some(endpoint);
             return Ok(value);
         }
