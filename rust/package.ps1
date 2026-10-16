@@ -5,11 +5,12 @@ $release=Join-Path $project ('release/ClaudeGuard-'+$Version)
 New-Item -ItemType Directory -Force $release|Out-Null
 $source=Join-Path $release ('.source-'+[DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Force (Join-Path $source 'rust/.cargo'),(Join-Path $source 'extension'),(Join-Path $source 'tests/extension-tests')|Out-Null
-foreach($name in @('Cargo.toml','Cargo.lock','README.zh-CN.md','VALIDATION.md')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $source 'rust')}
+foreach($name in @('Cargo.toml','Cargo.lock','README.zh-CN.md','VALIDATION.md','BROWSER-INCIDENT.md')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $source 'rust')}
 Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.ps1' -File|ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $source 'rust')}
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'crates') -Destination (Join-Path $source 'rust') -Recurse
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '.cargo/config.toml') -Destination (Join-Path $source 'rust/.cargo')
 foreach($name in @('README.md','VALIDATION.md','build.ps1','.gitignore','.gitattributes')){Copy-Item -LiteralPath (Join-Path $project $name) -Destination $source}
+Copy-Item -LiteralPath (Join-Path $project 'docs') -Destination $source -Recurse
 Get-ChildItem -LiteralPath (Join-Path $project 'extension') -File | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $source 'extension')}
 Get-ChildItem -LiteralPath (Join-Path $project 'tests/extension-tests') -Filter '*.mjs' -File | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $source 'tests/extension-tests')}
 foreach($pair in @(@($source,'ClaudeGuard.Source.zip'),@((Join-Path $source 'extension'),'ClaudeGuard.Extension.zip'))){

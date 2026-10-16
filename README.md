@@ -1,106 +1,226 @@
-# Claude 网络守卫 2.1
+<div align="center">
+  <img src="docs/brand-mark.svg" width="80" height="80" alt="Melian 标志" />
+  <h1>Melian</h1>
+  <p><strong>一个小小的灵动岛，守住 Claude 的网络连接。</strong></p>
+  <p>原生桌面 · 网络检查 · 静音可见提醒 · 登录自启</p>
+  <p>
+    <img src="https://img.shields.io/badge/Windows-11_x64-17191c?style=flat-square" alt="Windows 11 x64" />
+    <img src="https://img.shields.io/badge/native-Rust-17191c?style=flat-square&amp;logo=rust&amp;logoColor=white" alt="Rust 原生应用" />
+    <img src="https://img.shields.io/badge/UI-Win32_%2B_DirectComposition-17191c?style=flat-square" alt="Win32 与 DirectComposition" />
+    <img src="https://img.shields.io/badge/status-2.2_开发中-83d7b0?style=flat-square" alt="2.2 开发中" />
+  </p>
+  <p>
+    <a href="#功能">功能</a> ·
+    <a href="#安装">安装</a> ·
+    <a href="#更新">更新</a> ·
+    <a href="#快速开始">快速开始</a> ·
+    <a href="rust/README.zh-CN.md">使用指南</a> ·
+    <a href="#架构">架构</a> ·
+    <a href="#开发">开发</a> ·
+    <a href="#参与贡献">参与贡献</a>
+  </p>
+</div>
 
-Windows 11 x64 · Rust 原生桌面应用
+![Melian：平时安静，异常看得见。黑色胶囊的正常状态与连接受阻状态示意。](docs/readme-hero.svg)
 
-正常时只有一个黑色小胶囊：状态点与 Claude。绿色表示网络检查通过，黄色表示检查中。异常时加宽为红色警示胶囊，持续显示「Claude · 连接受阻」，恢复后才还原。绿色不代表所有浏览器配置都已接入。
+Melian 是为 Windows 上的 Claude Desktop 和 Claude Code 制作的网络守卫。平时只留一个黑色胶囊；点击展开启动入口和自启开关，网络异常时显示原因，并中断已接入客户端的受保护连接。
 
-单击胶囊，展开五个操作：
+它配合 Clash 工作：只有**全局模式、明确的代理节点、实际代理 IP 属地为美国**同时满足时才放行。Melian 本身不提供代理线路，也不改变账号地区。
 
-- **Claude 桌面**：接入并打开本机 Claude Desktop，保留原有账号与会话。
-- **Claude Code**：从守卫专用入口打开前台 Claude Code。
-- **Claude 网页**：在已接入扩展的浏览器配置里打开网页，继续使用原有登录状态。
-- **开机自启**：立即切换并保存 Windows 登录后自启。
-- **退出**：退出守卫，受保护连接随即失败。
+> [!IMPORTANT]
+> **本文介绍本地 2.2 开发版，程序改动尚未合入；仓库已提交的程序源码仍为 2.1。** 2.2 的网页版保护暂时停用：先前的自动接入方案可能在关闭 VPN 后影响其他网站，包括校园网认证。本地开发版已关闭该入口，普通 Edge / Chrome 页面不受保护；旧版扩展也不作为已验证的替代方案。详见[问题记录](rust/BROWSER-INCIDENT.md)。
 
-点击外部或按 Esc 收起。Tab、上下方向键移动焦点，Enter / 空格执行。拖动胶囊可移动位置。关闭面板不会退出守卫。
+## 功能
 
-## 安装与升级
+<table>
+  <tr>
+    <td width="33%"><strong>一个胶囊，按需展开</strong><br /><br />正常时只显示状态点与 Melian。支持拖动、置顶和位置记忆；常驻显示不抢键盘焦点。</td>
+    <td width="33%"><strong>Claude Desktop 接入</strong><br /><br />沿用官方客户端和原有登录。接入后，异常时阻止新启动，已打开的窗口保留、受保护网络断开。</td>
+    <td width="33%"><strong>Claude Code 专用入口</strong><br /><br />从菜单或 claude-guard 启动，保留工作目录和原始参数。网络异常时保留终端与会话。</td>
+  </tr>
+  <tr>
+    <td><strong>静音时也看得见</strong><br /><br />持续红色状态与「连接受阻」文字，配合自动展开的原因提示。声音可以辅助提醒，视觉提示始终保留。</td>
+    <td><strong>检查通过才连接</strong><br /><br />检查 Clash 模式、节点路径和实际 IP 属地。结果失效或检测中断时，拒绝新连接并关闭已有受保护连接。</td>
+    <td><strong>登录后自动运行</strong><br /><br />新安装默认开启自启。菜单中一键开关、即时保存；升级保留已有选择，无需单独的设置窗口。</td>
+  </tr>
+</table>
 
-运行 **ClaudeGuard.Setup.exe**。安装位置为当前用户的 %LOCALAPPDATA%\Programs\ClaudeGuard，不需要安装 .NET、WebView 或 Rust。
+**日常操作放在小面板里，诊断信息按需展开。** 节点选择交给 Clash；遇到异常时，Melian 提供对应的处理按钮。
 
-新安装默认开启登录自启和提示音。升级保留已有自启选择、提示音、恢复节点、Claude 程序路径与窗口位置；配置中的 soundEnabled 可关闭声音。视觉警示始终启用，静音时仍可识别异常。
+绿色表示网络检查通过。具体客户端是否已接入，要看该入口的状态；它不代表整台电脑或所有浏览器都已受保护。
 
-「开机自启」实际在当前用户登录后执行：使用 Windows 任务计划程序的登录触发器，延迟约 10 秒，启动失败时每分钟重试，最多 3 次。不开启管理员权限、不保存密码。菜单开关即时创建或移除该任务；卸载也会清理。旧版 Run 注册表启动项在升级后移除，避免重复启动。
+## 安装
 
-安装器先解压、检查新版，再停止守卫及其 Native Messaging 桥接。它不结束浏览器、终端、前台 CLI 或 Claude 子进程。旧安装保留为 Programs 目录中的 ClaudeGuard.rollback-*；配置备份位于 %APPDATA%\ClaudeGuard\backups。升级失败时恢复旧程序与配置。
+**平台：Windows 11 x64。** 运行时使用 Windows 自带组件，无需额外安装 .NET、WebView 或 Rust。网络检查需要已安装的 Clash / Mihomo 提供 `verge-mihomo` 控制管道。
 
-可使用 ClaudeGuard.Setup.exe --quiet 安静安装；--uninstall 卸载。卸载前请在 Edge、Chrome 的扩展页移除「Claude 网络守卫」，这样浏览器会恢复原代理设置。卸载保留用户配置与日志，不主动清除历史回退归档。
+当前仓库尚未发布 GitHub Release。以下安装与使用说明面向本地 2.2 开发版；仓库内的 2.0 / 2.1 历史产物不代表此版本。当前 `main` 源码可按[开发说明](#开发)构建 2.1，产物仍使用旧名称 `ClaudeGuard.Setup.exe`。
 
-## 首次使用网页
+1. 运行 **Melian.Setup.exe**，按提示完成当前用户安装。
+2. 启动 Clash，切换到全局模式并选择合适的美国节点，等待 Melian 检查。
+3. 单击胶囊，从 **Claude 桌面** 或 **Claude Code** 进入。
 
-点击「Claude 网页」，尚未接入时会出现同一面板内的引导：
+安装器创建桌面与开始菜单的 **Melian** 快捷方式。退出后，双击快捷方式或在开始菜单搜索 **Melian** 即可重新打开。
 
-1. 打开 Edge 或 Chrome 的扩展页，开启「开发者模式」。
-2. 选择「加载解压缩的扩展」，加载安装目录的 extension 文件夹。
-3. 重启该浏览器，关闭此前建立的连接。
-4. 扩展显示接入成功后，再点击「Claude 网页」。
+新安装默认**开启登录自启、关闭提示音**。自启可直接在下拉菜单中关闭；「开机自启」指当前用户登录 Windows 后启动。
 
-两个浏览器、每个浏览器配置都要分别接入。关闭扩展、未安装扩展的配置、其他浏览器均不在保护范围。遇到其他代理扩展、企业策略或系统 PAC 冲突，扩展会报告冲突并阻断 Claude 域名。
+## 更新
 
-## Claude Desktop
+运行新版本的安装器即可升级。目前没有应用内更新检查或自动下载。
 
-安装新版官方 Windows MSIX 客户端，网络检查通过后点击「Claude 桌面」，或运行 `claude-guard --desktop`。首次接入前请从 Claude 的托盘菜单完全退出客户端；守卫不会强制结束已有会话。
+升级保留自启选择、声音偏好、首选恢复节点、Claude 路径和窗口位置。安装器先检查新版，再替换 Melian 及其桥接程序；保留配置备份，失败时回退，不结束浏览器、终端或 Claude 子进程。
 
-守卫使用 Claude Desktop 官方固定代理配置 `egressProxyUrl`，写入当前用户的 `HKCU\SOFTWARE\Policies\Claude`，指向本机守卫。配置在 Desktop 下次启动时读取；接入后从原快捷方式打开同样生效，守卫退出时这条代理配置保留，请求失败。菜单的「查看详情」和 `--status` 可查看桌面接入状态。
+<details>
+<summary><strong>安装位置与卸载</strong></summary>
 
-网络不满足保护条件时，守卫拒绝专用入口启动，并监测、结束从原快捷方式发起的新 Desktop 启动。已有会话保留窗口，受保护连接断开。原快捷方式拦截采用约 200ms 轮询，窗口可能短暂出现；只在守卫运行时执行。守卫退出后的固定代理仍阻断联网，但不再拦截窗口启动。
+| 内容 | 位置或操作 |
+| --- | --- |
+| 安装目录 | `%LOCALAPPDATA%\Programs\ClaudeGuard` |
+| 配置与日志 | 通常为 `%APPDATA%\ClaudeGuard`；实际目录以安装目录的 `data-root.txt` 为准 |
+| 卸载 | Windows「设置 → 应用 → 已安装的应用 → Melian」，或 `Melian.Setup.exe --uninstall` |
 
-「已配置」与「已连接守卫」分别显示：后者要求观察到 Desktop 到 17890 的实际 TCP 连接；只有配置值而没有连接证据时，不宣称连接已验证。这项观察不代表已覆盖每个外部工具。
+Melian 原名 Claude 网络守卫。安装目录、程序内部名称及 `claude-guard` 命令沿用旧名，以兼容已有配置。
 
-如果 Windows 将策略目录设为只读，首次接入和卸载清理会弹出 UAC 授权。专用安装助手只修改该用户的这一项代理值，守卫和 Claude 客户端仍以普通权限运行；取消授权时不会启动未接入的客户端。
+卸载清理本应用的自启、快捷方式、PATH 和注册项，并移除仍归本应用所有的代理配置。重启 Claude Desktop 后恢复其原代理来源；若曾手动安装配套扩展，还需在浏览器中移除。用户配置、日志和历史回退归档会保留。
 
-要求 Desktop 1.44121.1 或更新版本。目前自动识别官方 MSIX 安装，不把独立 Claude Code 的 `claude.exe` 当成桌面客户端。存在设备策略、已有固定代理/PAC，或可检测的内置 Code 代理策略冲突时，拒绝覆盖并显示原因。只设置代理，不改账号、模型、登录状态或桌面数据。卸载只移除守卫创建且仍指向守卫的代理值；之后需重启 Desktop 才恢复其原代理来源。
+</details>
 
-固定代理适用于客户端、内置会话请求及 Windows Cowork 的代理感知网络路径。自动更新、外部浏览器登录、SSH 远端、系统身份认证代理，以及忽略代理的外部程序不在这项保护范围；外部 Edge/Chrome 仍需扩展。它不是全系统防火墙。内置 Code/Cowork 的实际任务验收与普通桌面页面验收分别记录，不因写入配置就宣称全部验证通过。
+## 快速开始
 
-依据：[官方网络代理说明](https://claude.com/docs/third-party/claude-desktop/network-proxy)、[Windows 策略优先级](https://claude.com/docs/third-party/claude-desktop/mdm)。
+### 看状态，按需操作
 
-## Claude Code 命令
+| 状态 | 含义 | 操作 |
+| --- | --- | --- |
+| 绿色 | 网络检查通过 | 使用已接入的 Claude 入口 |
+| 黄色 | 正在检查 | 等待验证完成，期间不放行 |
+| 红色 · 连接受阻 | 当前网络不满足条件 | 点击查看原因，按提示启动 Clash、恢复代理或重新检查 |
 
-安装器将 cli 目录加入当前用户 PATH。新开终端后运行：
+单击展开；点击外部或按 **Esc** 收起。拖动胶囊调整位置，使用 **Tab / 方向键** 移动焦点，**Enter / 空格** 执行操作。
 
-    claude-guard
-    claude-guard --cwd "D:\项目" -- --resume
+### Claude Desktop
 
-原始参数分别传递，不经过 shell 字符串拼接。启动前检查网络；仅对子进程设置受控代理。异常时只断开网络，不结束会话。
+使用官方 Windows MSIX 客户端，版本 **1.44121.1 或更新**。首次接入前，从 Claude 的托盘菜单完全退出客户端，再点击 **Claude 桌面**。如系统要求，完成一次代理配置授权；之后继续使用原账号和登录状态。
 
-只覆盖经此入口启动的 Windows 前台 Claude Code。已有会话、直接运行 claude、后台 supervisor / --bg / daemon、WSL、SSH 远程任务不在首版保护范围。
+接入后，从原来的 Claude 快捷方式启动也会使用固定代理。Melian 运行期间，网络异常会阻止新启动；已经打开的会话保留窗口，受保护连接断开。查看详情可区分「已配置」与观察到实际连接后的「已连接守卫」。
 
-其他命令：--desktop、--status、--recheck、--show、--open-web、--guard-help。
+### Claude Code
 
-## 异常时
+点击 **Claude Code**，或安装后新开终端运行：
 
-面板按当前原因显示一个处理按钮：启动 Clash、打开 Clash、重新检查或恢复代理。选择具体节点请在 Clash 中完成。首次验证通过后，守卫自动保存恢复目标。恢复前先阻断，完成切换后重新验证。
+```powershell
+claude-guard
+claude-guard --cwd "D:\Projects\my-app" -- --resume
+```
 
-启动时等待 Clash 不弹出提醒，但阻断状态始终以红色文字显示。曾经检查通过后，持续两秒的新异常会自动展开原因 12 秒，并做 6 秒轻微呼吸提示和一次提示音；同一次异常不重复提醒，恢复后再次出现则重新提醒。遵循 Windows 动画偏好；不抢键盘焦点，不更改系统音量，也不绕过静音。点击外部或按 Esc 可收起，红色文字保留到恢复。异常卡片的「查看详情」显示节点、IP 属地、验证时间及浏览器、Desktop 接入情况。
+Melian 只为该入口启动的进程设置代理，原始参数分别传递。已有会话、直接运行 `claude`、后台任务、WSL 和 SSH 远端不在这一入口的保护范围。
 
-## 保护条件
+### 遇到异常
 
-必须同时满足：Clash 全局模式、能够解析到确定的代理节点、实际代理 IP 属地为美国。节点名称中的“美国”不作为判据。
+网络正常运行后出现持续异常，胶囊自动展开原因，并保留红色文字直到恢复。电脑静音也能看见。面板提供一个当前可用的处理按钮；恢复代理时，先阻断连接，再切换并重新验证。
 
-- 通过 verge-mihomo 命名管道，每秒读取模式、嵌套策略组与节点配置。
-- 通过实际 Clash HTTP 代理，每 30 秒查询 https://api.country.is/，验证有效期为 45 秒。
-- 控制器健康租约为 3 秒；独立线程每 100ms 检查租约。
-- 直连、负载均衡、未知节点链、非美国、超时、过期：保持阻断。
-- 代理固定监听 127.0.0.1:17890，不占用其他端口替代；端口冲突会明确显示。
-- 节点、配置、网络变化或睡眠恢复撤销旧检测代次，关闭现有受保护连接。
-- 不解密 HTTPS；不记录请求内容、凭据或订阅信息。
-- 模式与节点变化存在约 1～2 秒检测窗口，不保证变化瞬间零请求通过。
+退出 Melian 后，已接入的受保护连接会失败。重新打开 Melian 并等待检查通过后可恢复连接；若要移除接入，请使用卸载流程。
 
-扩展把 claude.ai、claude.com、anthropic.com 及其子域固定送到守卫。没有直连后备；守卫退出或被强制结束后连接失败。其他网站按 Windows 当前的静态系统代理或直连设置转发。
+完整操作、代理范围、声音设置与自启排查见[中文使用指南](rust/README.zh-CN.md)。
 
-## 数据与构建
+## 架构
 
-配置、日志通常位于 %APPDATA%\ClaudeGuard。安装器会把原有数据目录的实际位置记在安装目录的 `data-root.txt` 中，保证安装环境、Windows 登录和浏览器启动读取同一份配置；遇到 Windows 打包应用的目录重定向时，以此文件记录为准。升级不搬动已有数据。配置沿用 1.x 字段，可手工设置 claudePath；代理端口和控制管道修改后需要重启。日志不记录会话内容。
+```mermaid
+flowchart LR
+    Desktop["Claude Desktop<br/>已接入的客户端"] --> Proxy["本机代理<br/>127.0.0.1:17890"]
+    Code["Claude Code<br/>经 claude-guard 启动"] --> Proxy
+    Proxy --> Clash["Clash / Mihomo"]
+    Clash --> Claude["Claude 服务"]
+    Core["检测核心<br/>模式 · 节点 · IP 属地"] -. "决定放行 / 撤销连接" .-> Proxy
+    Core -. "控制管道与代理路径验证" .-> Clash
+```
 
-守卫与桌面代理助手通过当前用户的一次性 Windows 任务启动，防止从打包应用打开安装器时，代理注册表值被写进隔离副本而 Desktop 无法读取。临时任务没有定时触发器，启动确认后立即删除，不改变登录自启开关。接入记录 desktop-proxy.json 保存代理值的归属，不包含会话数据。
+UI 负责呈现状态与接收操作；检测核心负责验证，本机代理负责放行和断开连接。默认拒绝连接，HTTPS 流量不解密。
 
-正式构建入口为根目录 build.ps1，调用 rust/build.ps1。产品代码全部为 Rust；浏览器 API 适配保留 JavaScript。源码包含 Cargo.lock，运行 cargo test --workspace 和原有 15 项扩展测试。
+| 模块 | 技术 | 职责 |
+| --- | --- | --- |
+| `desktop` | Rust · Win32 · Direct2D / DirectWrite / DirectComposition | 胶囊、动画、托盘、键盘与辅助功能 |
+| `core` | Rust · Tokio | Mihomo 检测、状态租约、HTTP / CONNECT 代理、隧道撤销 |
+| `platform` | Rust · Windows API | 自启、进程识别、Desktop 接入、当前用户 IPC |
+| `protocol` | Rust · Serde | 设置、状态、请求与旧协议兼容 |
+| `cli` | Rust | Claude Code 启动器、命令操作、Native Messaging 桥接 |
+| `setup` | Rust | 安装、升级、备份回退与卸载 |
+| `extension` | JavaScript · Manifest V3 | 保留的浏览器扩展实现；当前不作为已验证的网页保护方案 |
 
-构建需要 Rust stable MSVC、MSVC x64 构建工具、Windows SDK、Node.js。UI 使用 windows-rs 调用 Win32、Direct2D、DirectWrite、DirectComposition；异步网络采用 Tokio。C 运行库静态链接。
+<details>
+<summary><strong>检测机制与仓库结构</strong></summary>
 
-在 Visual Studio 的 x64 Native Tools / Developer PowerShell 中执行根目录 `./build.ps1`。输出为 `rust/dist/ClaudeGuard.Setup.exe`。构建脚本也支持本机已有的 `.tools` 工具缓存，但源码包不分发 Microsoft 工具链；在其他电脑上请先正常安装上述构建依赖。
+- 每秒通过 `verge-mihomo` 读取模式、嵌套策略组与实际节点；直连、负载均衡或路径不明确时拒绝放行。
+- 每 30 秒通过实际代理向 `api.country.is` 查询 IP 属地，结果有效期 45 秒。非美国、超时、无结果或过期均阻断。
+- 单调时钟租约与独立看门狗防止检测任务失联后继续放行；节点、配置、网络变化或睡眠恢复时撤销旧检测结果和现有隧道。
+- 代理固定监听 `127.0.0.1:17890`。端口冲突明确报错，不自动换端口；模式、节点变化存在约 1～2 秒检测窗口。
 
-旧 .NET 安装器及源码位于 rollback-dotnet，未进入 Rust 安装包。
+```text
+rust/crates/             六个 Rust workspace 模块
+rust/build.ps1           测试、发布构建与安装器生成
+rust/package.ps1         整理安装包、源码、扩展与校验值
+rust/README.zh-CN.md     随安装包交付的中文使用指南
+rust/BROWSER-INCIDENT.md 网页接入问题与停用记录
+extension/              浏览器扩展兼容源码
+tests/extension-tests/  扩展测试
+docs/                   README 图形资源
+release/                历史交付及本地产物
+```
 
-详细测试结果与待验证项目见 VALIDATION.md。Windows 重启登录、真实账号登录与实际睡眠恢复，只有执行后才记为通过。
+旧 .NET 实现保留为本地回退归档，不进入 Rust 正式构建。
+
+</details>
+
+## 开发
+
+### 环境
+
+Windows 11 x64、Rust stable 的 MSVC 工具链、MSVC x64 构建工具、Windows SDK，以及用于扩展测试的 Node.js。请在 Visual Studio 的 **x64 Native Tools / Developer PowerShell** 中构建。
+
+### 构建
+
+```powershell
+git clone https://github.com/JJchess/Melian.git
+cd Melian
+.\build.ps1
+```
+
+构建脚本运行 Rust 与扩展测试，并检查安装器内嵌载荷。当前 `main` 的 2.1 源码生成 **`rust/dist/ClaudeGuard.Setup.exe`**；本地 2.2 开发版生成 **`rust/dist/Melian.Setup.exe`**。C 运行库静态链接，安装端不需要开发工具链。
+
+需要整理交付文件时，再运行：
+
+```powershell
+.\rust\package.ps1
+```
+
+当前 `main` 输出位于 `release/ClaudeGuard-2.1.0/`；本地 2.2 开发版输出位于 `release/Melian-2.2.0/`。两者均整理安装器、源码、扩展归档、中文说明、验收记录和 SHA-256 校验文件。生成归档不代表网页功能已恢复或版本已发布。
+
+### 检查
+
+```powershell
+cargo test --manifest-path rust/Cargo.toml --workspace --locked
+node tests/extension-tests/run.mjs
+```
+
+最近一次本机构建通过 **71 项 Rust 测试、16 项扩展测试**，记录于[当前开发版问题记录](rust/BROWSER-INCIDENT.md)。这些测试不等于实机网络场景全部验收通过。
+
+已有 Desktop 连接断开、规则模式拦截等实机记录见[验收文档](rust/VALIDATION.md)。**新自启方案的真实重启登录、校园网复测、物理多屏与睡眠恢复、内置 Code / Cowork 实际任务仍待验证。** 旧版浏览器隔离测试不能作为当前网页方案已完成的依据。
+
+## 数据与权限
+
+- **本地保存。** 设置、日志和接入记录保存在当前用户目录；升级保留已有数据。
+- **连接透传。** 不解密 HTTPS，不记录会话内容、密钥或订阅；IP 属地检查会通过代理向 `country.is` 发出请求。
+- **权限按需使用。** 常驻应用以普通用户权限运行；Desktop 首次配置或卸载清理遇到受限策略目录时，系统会请求一次 UAC 授权。
+- **范围明确。** 保护已接入的代理流量。自动更新、外部工具、远程任务及不遵循代理的程序不在该范围；当前普通浏览器网页也不在保护范围。
+
+## 参与贡献
+
+欢迎通过 [Issues](https://github.com/JJchess/Melian/issues) 提交问题，或提交范围清晰的 Pull Request。修改网络与代理逻辑时，请覆盖默认拒绝、旧验证失效、已有隧道关闭，以及守卫退出后的行为。
+
+报告问题请附上 Windows / Melian / Clash 版本、使用的入口、复现步骤和脱敏后的错误信息。涉及其他网站时，请说明网络类型、系统代理开关和 Melian 是否运行；不要上传密钥、订阅链接或会话内容。
+
+## 致谢
+
+原生界面与系统集成基于 [windows-rs](https://github.com/microsoft/windows-rs)，异步网络使用 [Tokio](https://github.com/tokio-rs/tokio)，代理控制对接 [Mihomo](https://github.com/MetaCubeX/mihomo)。README 的内容组织参考了 [CCBaga](https://github.com/liseami/CCBaga)，图形资源为本项目制作。
+
+<div align="center">
+  <sub>Melian 是独立项目，与 Anthropic 无隶属关系。</sub>
+</div>
