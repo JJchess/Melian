@@ -399,6 +399,7 @@ impl IslandView {
                 changed = true;
             }
             if s.smoke && s.started.elapsed() > Duration::from_secs(2) {
+                eprintln!("AppKit smoke: capture and stop");
                 exit = true;
             }
         }
@@ -490,6 +491,9 @@ pub fn run() -> Result<()> {
     }
     let mtm = MainThreadMarker::new().context("AppKit 必须在主线程启动")?;
     let app = NSApplication::sharedApplication(mtm);
+    if smoke {
+        eprintln!("AppKit smoke: application created");
+    }
     app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
     let view = IslandView::new(
         mtm,
@@ -538,6 +542,9 @@ pub fn run() -> Result<()> {
         );
         panel.setContentView(Some(&view));
         panel.orderFrontRegardless();
+        if smoke {
+            eprintln!("AppKit smoke: panel visible");
+        }
         view.layout(false);
         view.setAccessibilityLabel(Some(ns_string!("Melian 网络守卫，点击展开，拖动调整位置")));
         let status =
@@ -563,9 +570,14 @@ pub fn run() -> Result<()> {
             true,
         );
         if smoke {
+            eprintln!("AppKit smoke: expanding");
             view.expand(true, false);
+            eprintln!("AppKit smoke: entering event loop");
         }
         app.run();
+        if smoke {
+            eprintln!("AppKit smoke: event loop stopped");
+        }
         timer.invalidate();
         center.removeObserver(&view);
         NSStatusBar::systemStatusBar().removeStatusItem(&status);

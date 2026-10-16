@@ -45,6 +45,13 @@ rm -rf -- "$app/Contents/Resources/Melian.iconset"
 codesign --force --sign - "$app/Contents/MacOS/claude-guard"
 codesign --force --deep --sign - "$app"
 codesign --verify --deep --strict "$app"
-"$app/Contents/MacOS/ClaudeGuard" --smoke-test --preview-output "$root/rust/dist/macos-preview-$asset.png"
+node - "$app/Contents/MacOS/ClaudeGuard" "$root/rust/dist/macos-preview-$asset.png" <<'JS'
+const { spawnSync } = require('node:child_process');
+const { statSync } = require('node:fs');
+const result = spawnSync(process.argv[2], ['--smoke-test', '--preview-output', process.argv[3]], { stdio: 'inherit', timeout: 20000 });
+if (result.error) throw result.error;
+if (result.status !== 0) throw new Error(`AppKit smoke exited ${result.status} / ${result.signal}`);
+if (statSync(process.argv[3]).size < 100) throw new Error('AppKit did not produce a preview');
+JS
 COPYFILE_DISABLE=1 tar -czf "$root/rust/dist/Melian-macos-$asset.tar.gz" -C "$stage" Melian.app
 echo "Built rust/dist/Melian-macos-$asset.tar.gz"
