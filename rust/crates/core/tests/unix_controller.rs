@@ -20,7 +20,17 @@ async fn unix_controller_resolves_live_mode_and_nested_nodes() {
                     assert!(bytes.len() < 4096);
                 }
                 let request = String::from_utf8_lossy(&bytes);
-                let body=if request.contains("/version"){json!({"version":"test"})}else if request.contains("/configs"){json!({"mode":"global","mixed-port":7890})}else{json!({"proxies":{"GLOBAL":{"type":"Selector","now":"Auto"},"Auto":{"type":"URLTest","now":"US"},"US":{"type":"Shadowsocks","server":"test","port":443}}})}.to_string();
+                let body = if request.contains("/version") {
+                    json!({"version":"test"})
+                } else if request.contains("/configs") {
+                    json!({"mode":"global","mixed-port":7890})
+                } else {
+                    json!({"proxies":{
+                        "GLOBAL":{"type":"Selector","now":"Auto","all":["Auto","US"]},
+                        "Auto":{"type":"URLTest","now":"US","all":["US"]},
+                        "US":{"type":"Shadowsocks","id":"test"}
+                    }})
+                }.to_string();
                 stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).as_bytes()).await.unwrap();
                 // Wait for the client to finish its HTTP write before closing
                 // the socket; otherwise macOS can report EPIPE on a valid reply.
