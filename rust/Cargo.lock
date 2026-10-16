@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "ClaudeGuard"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -143,7 +143,7 @@ dependencies = [
 
 [[package]]
 name = "claude-guard"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -375,7 +375,7 @@ dependencies = [
 
 [[package]]
 name = "guard-core"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -396,7 +396,7 @@ dependencies = [
 
 [[package]]
 name = "guard-platform"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -413,7 +413,7 @@ dependencies = [
 
 [[package]]
 name = "guard-protocol"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -426,7 +426,7 @@ dependencies = [
 
 [[package]]
 name = "guard-setup"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "anyhow",
  "chrono",

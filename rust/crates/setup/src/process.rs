@@ -116,7 +116,17 @@ pub fn stop_owned() -> Result<()> {
                 PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_TERMINATE | PROCESS_SYNCHRONIZE,
                 false,
                 pid,
-            )?;
+            );
+            let process = match process {
+                Ok(process) => process,
+                Err(e)
+                    if e.code()
+                        == windows::core::HRESULT::from_win32(ERROR_INVALID_PARAMETER.0) =>
+                {
+                    continue
+                }
+                Err(e) => return Err(e.into()),
+            };
             let mut actual = vec![0u16; 32768];
             let mut length = actual.len() as u32;
             if QueryFullProcessImageNameW(
@@ -141,12 +151,19 @@ pub fn stop_owned() -> Result<()> {
                     a.get(1) == Some(&format!("chrome-extension://{EXTENSION_ID}/"))
                 });
             if is_desktop || is_bridge {
-                let result = TerminateProcess(process, 0);
+                let result = if WaitForSingleObject(process, 0) == WAIT_OBJECT_0 {
+                    Ok(())
+                } else {
+                    TerminateProcess(process, 0)
+                };
+                let already_exited = WaitForSingleObject(process, 0) == WAIT_OBJECT_0;
                 if result.is_ok() {
                     let _ = WaitForSingleObject(process, 5000);
                 }
                 let _ = CloseHandle(process);
-                result?;
+                if !already_exited {
+                    result?;
+                }
             } else {
                 let _ = CloseHandle(process);
             }

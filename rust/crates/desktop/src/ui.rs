@@ -7,7 +7,6 @@ use anyhow::Result;
 use guard_platform::{host::UiEvent, integration, launch, Host};
 use guard_protocol::{log, wide, State};
 use std::{
-    collections::HashSet,
     sync::{
         atomic::{AtomicIsize, Ordering},
         Arc, Mutex,
@@ -79,9 +78,8 @@ struct App {
     drag_anchor: (f64, f64),
     dragged: bool,
     animations: bool,
-    seen_healthy: bool,
-    fault: Option<(String, Instant)>,
-    notified: HashSet<String>,
+    alerts: crate::alerts::Alerts,
+    pulse_until: Option<Instant>,
     peek_until: Option<Instant>,
     feedback: Option<(String, Instant)>,
     hook: HHOOK,
@@ -157,9 +155,8 @@ pub fn run(host: Arc<Host>, events: UnboundedReceiver<UiEvent>) -> Result<()> {
             drag_anchor: anchor,
             dragged: false,
             animations: animations_enabled(),
-            seen_healthy: false,
-            fault: None,
-            notified: HashSet::new(),
+            alerts: crate::alerts::Alerts::default(),
+            pulse_until: None,
             peek_until: None,
             feedback: None,
             hook: HHOOK::default(),
@@ -241,21 +238,31 @@ fn animations_enabled() -> bool {
     }
 }
 impl App {
+    fn blocked(&self) -> bool {
+        self.state.status == "blocked"
+    }
+    fn collapsed_size(&self) -> (f32, f32) {
+        if self.blocked() {
+            (202., 40.)
+        } else {
+            (132., 34.)
+        }
+    }
     fn scale(&self) -> f32 {
         self.dpi / 96.
     }
     fn desired_height(&self) -> f32 {
         if !self.expanded {
-            return 34.;
+            return self.collapsed_size().1;
         }
         match self.view {
             View::Guide => 328.,
-            View::Details => 316.,
+            View::Details => 358.,
             View::Menu => {
                 if self.problem() {
-                    340.
+                    378.
                 } else {
-                    230.
+                    268.
                 }
             }
         }
@@ -264,6 +271,9 @@ impl App {
         !self.state.allowed || self.feedback.is_some()
     }
     fn action_label(&self) -> &'static str {
+        if self.feedback.is_some() && self.state.allowed {
+            return "知道了";
+        }
         match self.state.suggested_action.as_str() {
             "startClash" => "启动 Clash",
             "restoreProxy" => "恢复代理",
@@ -273,14 +283,15 @@ impl App {
     }
     fn animate(&mut self) {
         unsafe {
+            let (width, height) = self.collapsed_size();
             let to = if self.expanded {
                 (248., self.desired_height())
             } else if self.pressed == 0 {
-                (128., 32.)
+                (width - 4., height - 2.)
             } else if self.hover == 0 {
-                (136., 35.)
+                (width + 4., height + 1.)
             } else {
-                (132., 34.)
+                (width, height)
             };
             self.motion = Some(Motion {
                 start: Instant::now(),
@@ -354,7 +365,7 @@ impl App {
                 );
                 self.anchor.1 = self.anchor.1.clamp(
                     monitor.rcWork.top as f64,
-                    (monitor.rcWork.bottom as f64 - 350. * self.scale() as f64)
+                    (monitor.rcWork.bottom as f64 - 390. * self.scale() as f64)
                         .max(monitor.rcWork.top as f64),
                 );
             }
@@ -421,6 +432,7 @@ impl App {
             match event {
                 UiEvent::Show => self.open(true),
                 UiEvent::Exit => self.exit(),
+                UiEvent::Feedback(message) => self.feedback(message),
             }
         }
         if self.closing {
@@ -428,12 +440,13 @@ impl App {
         }
         let next = self.host.state();
         let signature = format!(
-            "{}|{}|{}|{}|{}|{}|{}",
+            "{}|{}|{}|{}|{}|{}|{}|{}",
             next.status,
             next.reason_code,
             next.reason,
             next.node,
             next.country,
+            next.desktop.reason,
             next.browsers
                 .iter()
                 .map(|(k, b)| format!("{k}:{}:{}:{}", b.connected, b.protected, b.reason))
@@ -446,35 +459,33 @@ impl App {
             }
         );
         let was_problem = self.problem();
+        let was_blocked = self.blocked();
         self.state = next;
-        if self.state.allowed {
-            self.seen_healthy = true;
-            self.fault = None;
-        } else if self.seen_healthy && self.state.status == "blocked" {
-            let code = self.state.reason_code.clone();
-            if self.fault.as_ref().is_none_or(|(old, _)| old != &code) {
-                self.fault = Some((code.clone(), Instant::now()));
+        if self.alerts.update(
+            self.state.allowed,
+            self.blocked(),
+            &self.state.reason_code,
+            Instant::now(),
+        ) {
+            self.pulse_until = Some(Instant::now() + Duration::from_secs(6));
+            if !self.expanded {
+                self.open(false);
+                self.peek_until = Some(Instant::now() + Duration::from_secs(12));
             }
-            if self
-                .fault
-                .as_ref()
-                .is_some_and(|(_, t)| t.elapsed() >= Duration::from_secs(2))
-                && !self.notified.contains(&code)
-            {
-                self.notified.insert(code);
-                if !self.expanded {
-                    self.open(false);
-                    self.peek_until = Some(Instant::now() + Duration::from_secs(6));
-                }
-                if self.host.engine.settings().sound_enabled {
-                    unsafe {
-                        let _ = MessageBeep(MB_ICONWARNING);
-                    }
+            if self.host.engine.settings().sound_enabled {
+                unsafe {
+                    let _ = MessageBeep(MB_ICONWARNING);
                 }
             }
         }
-        if self.state.status == "checking" {
-            self.fault = None;
+        if self.state.allowed {
+            self.pulse_until = None;
+        }
+        if self.pulse_until.is_some() {
+            self.signature.clear();
+            if self.pulse_until.is_some_and(|t| Instant::now() >= t) {
+                self.pulse_until = None;
+            }
         }
         if self.peek_until.is_some_and(|t| Instant::now() >= t) {
             self.collapse();
@@ -489,7 +500,9 @@ impl App {
         }
         if signature != self.signature {
             self.signature = signature;
-            if self.expanded && (self.problem() != was_problem || self.view == View::Details) {
+            if (!self.expanded && self.blocked() != was_blocked)
+                || (self.expanded && (self.problem() != was_problem || self.view == View::Details))
+            {
                 self.animate();
             }
             if self.motion.is_none() {
@@ -526,15 +539,16 @@ impl App {
                             checked: None,
                         });
                     }
-                    self.row(1, "Claude Code", 52. + error_y, None);
-                    self.row(2, "Claude 网页", 90. + error_y, None);
+                    self.row(11, "Claude 桌面", 52. + error_y, None);
+                    self.row(1, "Claude Code", 90. + error_y, None);
+                    self.row(2, "Claude 网页", 128. + error_y, None);
                     self.row(
                         3,
                         "开机自启",
-                        138. + error_y,
+                        176. + error_y,
                         Some(self.host.engine.settings().auto_start),
                     );
-                    self.row(4, "退出", 176. + error_y, None);
+                    self.row(4, "退出", 214. + error_y, None);
                 }
                 View::Guide => {
                     self.row(7, "Edge 接入", 151., None);
@@ -543,11 +557,23 @@ impl App {
                     self.row(10, "返回", 281., None);
                 }
                 View::Details => {
-                    self.row(10, "返回", 266., None);
+                    self.row(10, "返回", 308., None);
                 }
             }
         }
         let problem = self.problem();
+        let blocked = self.blocked();
+        let pulse = if self.animations {
+            self.pulse_until
+                .map(|t| {
+                    let seconds = t.saturating_duration_since(Instant::now()).as_secs_f32();
+                    0.5 + 0.5 * (seconds * std::f32::consts::TAU / 2.).cos()
+                })
+                .unwrap_or(0.)
+        } else {
+            0.
+        };
+        let collapsed_height = self.collapsed_size().1;
         let Some(r) = self.renderer.as_mut() else {
             return Ok(());
         };
@@ -559,20 +585,27 @@ impl App {
         )?;
         r.begin();
         let body = rect(4., 4., self.width, self.height);
-        let expanded_fraction = ((self.width - 132.) / 116.).clamp(0., 1.);
+        let expanded_fraction = ((self.height - collapsed_height) / 80.).clamp(0., 1.);
         // A single surface changes shape. The edge remains quiet on both light and dark desktops.
-        r.rounded(
-            rect(3., 3., self.width + 2., self.height + 2.),
-            if expanded_fraction < 0.05 { 18. } else { 25. },
-            0xffffff,
-            0.10,
-        );
+        let edge = rect(3., 3., self.width + 2., self.height + 2.);
+        let edge_color = if blocked { 0xff6969 } else { 0xffffff };
+        let edge_alpha = if blocked { 0.65 + 0.3 * pulse } else { 0.10 };
         if expanded_fraction < 0.05 {
-            r.rounded(body, 17., 0x09090b, 1.);
+            r.rounded(edge, collapsed_height / 2. + 1., edge_color, edge_alpha);
         } else {
-            r.continuous(body, 17. + 9. * expanded_fraction, 0x09090b)?;
+            r.continuous(edge, 18. + 9. * expanded_fraction, edge_color, edge_alpha)?;
         }
-        let header_x = if expanded_fraction > 0. {
+        if expanded_fraction < 0.05 {
+            r.rounded(
+                body,
+                collapsed_height / 2.,
+                if blocked { 0x291316 } else { 0x09090b },
+                1.,
+            );
+        } else {
+            r.continuous(body, 17. + 9. * expanded_fraction, 0x09090b, 1.)?;
+        }
+        let header_x = if expanded_fraction > 0. || blocked {
             24.
         } else {
             (self.width - 76.) / 2. + 4.
@@ -582,11 +615,40 @@ impl App {
             "checking" => 0xf4c878,
             _ => 0xf08585,
         };
-        r.dot(header_x + 3., 21., 3., dot_color, 1.);
+        let header_y = if blocked && expanded_fraction < 0.05 {
+            24.
+        } else {
+            21.
+        };
+        if blocked {
+            r.dot(
+                header_x + 3.,
+                header_y,
+                7. + pulse * 2.,
+                dot_color,
+                0.12 + pulse * 0.13,
+            );
+        }
+        r.dot(
+            header_x + 3.,
+            header_y,
+            if blocked { 4. } else { 3. },
+            dot_color,
+            1.,
+        );
         r.text(
-            "Claude",
-            rect(header_x + 16., 8., 92., 26.),
-            0xf5f5f7,
+            if blocked {
+                "Claude · 连接受阻"
+            } else {
+                "Claude"
+            },
+            rect(
+                header_x + 16.,
+                header_y - 13.,
+                if blocked { 158. } else { 92. },
+                26.,
+            ),
+            if blocked { 0xffc9c9 } else { 0xf5f5f7 },
             1.,
             2,
         );
@@ -614,13 +676,22 @@ impl App {
                             .as_ref()
                             .map(|(s, _)| s.as_str())
                             .unwrap_or(&self.state.reason);
-                        r.text(reason, rect(24., 40., 202., 34.), 0xb5b5bd, a, 1);
+                        if blocked {
+                            r.rounded(rect(16., 40., 224., 54.), 10., 0xe75e67, 0.12 * a);
+                        }
+                        r.text(
+                            reason,
+                            rect(24., 43., 202., 34.),
+                            if blocked { 0xffb8b8 } else { 0xb5b5bd },
+                            a,
+                            1,
+                        );
                         r.text("查看详情", rect(164., 76., 64., 17.), 0x77777f, a, 1);
                         r.rounded(rect(23., 101., 210., 32.), 10., 0x1e1e22, a);
                     }
                     r.line(
-                        (24., 131. + error_y),
-                        (232., 131. + error_y),
+                        (24., 169. + error_y),
+                        (232., 169. + error_y),
                         0xffffff,
                         0.07 * a,
                         1.,
@@ -658,6 +729,7 @@ impl App {
                         ("验证时间", time),
                         ("Edge", browser_label(&self.state, "edge")),
                         ("Chrome", browser_label(&self.state, "chrome")),
+                        ("桌面", self.state.desktop.reason.clone()),
                     ]
                     .into_iter()
                     .enumerate()
@@ -689,7 +761,7 @@ impl App {
                     );
                 }
                 let y = hit.area.top;
-                if hit.id <= 4 {
+                if hit.id <= 4 || hit.id == 11 {
                     r.icon(
                         hit.id,
                         28.,
@@ -779,6 +851,14 @@ impl App {
             .unwrap_or(u32::MAX)
     }
     fn feedback(&mut self, text: String) {
+        if self.blocked() && self.pulse_until.is_none() {
+            self.pulse_until = Some(Instant::now() + Duration::from_secs(6));
+            if self.host.engine.settings().sound_enabled {
+                unsafe {
+                    let _ = MessageBeep(MB_ICONWARNING);
+                }
+            }
+        }
         self.feedback = Some((text, Instant::now()));
         self.expanded = true;
         self.view = View::Menu;
@@ -786,7 +866,12 @@ impl App {
     }
     fn action(&mut self, id: u32) {
         self.peek_until = None;
-        if self.host.engine.settings().proxy_port == 0 && matches!(id, 1 | 3 | 5 | 7 | 8 | 9) {
+        if id == 5 && self.feedback.is_some() && self.state.allowed {
+            self.feedback = None;
+            self.animate();
+            return;
+        }
+        if self.host.engine.settings().proxy_port == 0 && matches!(id, 1 | 3 | 5 | 7 | 8 | 9 | 11) {
             self.feedback("界面预览模式".into());
             return;
         }
@@ -807,6 +892,19 @@ impl App {
                     }
                 } else {
                     self.open(true)
+                }
+            }
+            11 => {
+                if !self.state.fresh_allowed() {
+                    self.open(true);
+                } else {
+                    let host = self.host.clone();
+                    tokio::spawn(async move {
+                        if let Err(error) = host.launch_desktop().await {
+                            let _ = host.ui.send(UiEvent::Feedback(error.to_string()));
+                        }
+                    });
+                    self.collapse();
                 }
             }
             2 => {

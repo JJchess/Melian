@@ -16,13 +16,13 @@ impl Drop for Apartment {
         }
     }
 }
-struct Scheduler {
-    service: ITaskService,
-    folder: ITaskFolder,
+pub(crate) struct Scheduler {
+    pub(crate) service: ITaskService,
+    pub(crate) folder: ITaskFolder,
     _apartment: Apartment,
 }
 impl Scheduler {
-    fn connect() -> Result<Self> {
+    pub(crate) fn connect() -> Result<Self> {
         unsafe {
             let initialized = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
             // UI threads already use STA; callers on another COM apartment remain valid.
@@ -89,7 +89,7 @@ pub fn set_enabled(enabled: bool) -> Result<()> {
         trigger.SetDelay(&BSTR::from("PT10S"))?;
         let action: IExecAction = task.Actions()?.Create(TASK_ACTION_EXEC)?.cast()?;
         action.SetPath(&BSTR::from(desktop_exe().to_string_lossy().as_ref()))?;
-        action.SetArguments(&BSTR::from("--autostart"))?;
+        action.SetArguments(&BSTR::from("--autostart --native-context"))?;
         action.SetWorkingDirectory(&BSTR::from(install_dir().to_string_lossy().as_ref()))?;
         scheduler.folder.RegisterTaskDefinition(
             &name,

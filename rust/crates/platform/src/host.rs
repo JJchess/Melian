@@ -1,8 +1,8 @@
-use crate::{ipc, launch};
+use crate::{desktop, ipc, launch};
 use anyhow::{bail, Result};
 use chrono::Utc;
 use guard_core::Engine;
-use guard_protocol::{pipe_path, BrowserState, Request, Response, State};
+use guard_protocol::{pipe_path, BrowserState, DesktopState, Request, Response, State};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -10,10 +10,11 @@ use std::{
 };
 use tokio::sync::mpsc::UnboundedSender;
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub enum UiEvent {
     Show,
     Exit,
+    Feedback(String),
 }
 struct Session {
     state: BrowserState,
@@ -106,6 +107,7 @@ impl Sessions {
 pub struct Host {
     pub engine: Arc<Engine>,
     sessions: Mutex<Sessions>,
+    desktop: Mutex<DesktopState>,
     pub ui: UnboundedSender<UiEvent>,
 }
 impl Host {
@@ -113,12 +115,14 @@ impl Host {
         Arc::new(Self {
             engine,
             sessions: Mutex::new(Sessions::default()),
+            desktop: Mutex::new(DesktopState::default()),
             ui,
         })
     }
     pub fn state(&self) -> State {
         let mut state = self.engine.state();
         self.sessions.lock().unwrap().merge(&mut state);
+        state.desktop = self.desktop.lock().unwrap().clone();
         state
     }
     fn ensure_allowed(&self) -> Result<()> {
@@ -130,6 +134,16 @@ impl Host {
     pub fn open_web(&self) -> Result<()> {
         self.ensure_allowed()?;
         self.sessions.lock().unwrap().queue_web(true)
+    }
+    pub async fn launch_desktop(&self) -> Result<()> {
+        self.ensure_allowed()?;
+        let port = self.engine.settings().proxy_port;
+        let engine = self.engine.clone();
+        tokio::task::spawn_blocking(move || {
+            desktop::launch(port, || engine.gate.permit().is_some())
+        })
+        .await??;
+        Ok(())
     }
     pub async fn dispatch(&self, r: Request) -> Result<Response> {
         match r.action.as_str() {
@@ -167,6 +181,7 @@ impl Host {
                 launch::launch_terminal(r.cwd.as_deref(), r.args.as_deref().unwrap_or(&[]))?;
             }
             "openWeb" => self.open_web()?,
+            "launchDesktop" => self.launch_desktop().await?,
             "show" => {
                 let _ = self.ui.send(UiEvent::Show);
             }
@@ -186,6 +201,33 @@ impl Host {
     }
     pub fn start(self: &Arc<Self>) -> Result<()> {
         let first = ipc::create_server(&pipe_path(), true)?;
+        let monitor = self.clone();
+        std::thread::spawn(move || {
+            let mut watcher = desktop::StartWatch::new();
+            let mut checked = Instant::now() - Duration::from_secs(3);
+            let mut upstream = 0;
+            while !monitor.engine.stop.is_cancelled() {
+                let port = monitor.engine.settings().proxy_port;
+                if watcher
+                    .check(monitor.engine.gate.permit().is_some())
+                    .unwrap_or(false)
+                {
+                    guard_protocol::log("已阻止 Claude Desktop 的新启动");
+                    let _ = monitor.ui.send(UiEvent::Feedback(
+                        "连接未就绪，已阻止 Claude 桌面启动".into(),
+                    ));
+                }
+                if checked.elapsed() >= Duration::from_secs(3) {
+                    let latest = monitor.engine.state().upstream_port;
+                    if latest != 0 {
+                        upstream = latest;
+                    }
+                    *monitor.desktop.lock().unwrap() = desktop::status(port, upstream);
+                    checked = Instant::now();
+                }
+                std::thread::sleep(Duration::from_millis(200));
+            }
+        });
         let host = self.clone();
         tokio::spawn(async move {
             let mut next = first;
@@ -210,7 +252,8 @@ impl Host {
                                 tokio::time::sleep(Duration::from_secs(1)).await;Ok::<_,anyhow::Error>(())
                             }=>{result?;}}}
                         } else {
-                            let response=tokio::time::timeout(Duration::from_secs(15),host.dispatch(request)).await?.unwrap_or_else(|e|Response{ok:false,error:Some(e.to_string()),state:Some(host.state()),..Response::default()});
+                            let timeout=if request.action=="launchDesktop" {180} else {15};
+                            let response=tokio::time::timeout(Duration::from_secs(timeout),host.dispatch(request)).await?.unwrap_or_else(|e|Response{ok:false,error:Some(e.to_string()),state:Some(host.state()),..Response::default()});
                             tokio::time::timeout(Duration::from_secs(3),ipc::write(&mut connected,&response)).await??;
                         } Ok(())
                     }.await;

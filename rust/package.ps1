@@ -1,4 +1,4 @@
-param([string]$Version='2.0.0')
+param([string]$Version='2.1.0')
 $ErrorActionPreference='Stop'
 $project=Split-Path $PSScriptRoot -Parent
 $release=Join-Path $project ('release/ClaudeGuard-'+$Version)
@@ -20,7 +20,8 @@ foreach($pair in @(@($source,'ClaudeGuard.Source.zip'),@((Join-Path $source 'ext
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'dist/ClaudeGuard.Setup.exe') -Destination $release -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'README.zh-CN.md') -Destination (Join-Path $release '使用说明.md') -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'VALIDATION.md') -Destination (Join-Path $release '验收记录.md') -Force
-Get-ChildItem -LiteralPath $release -File | Where-Object Name -ne 'SHA256SUMS.txt' | Sort-Object Name | ForEach-Object {((Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLower()+'  '+$_.Name)} | Set-Content -LiteralPath (Join-Path $release 'SHA256SUMS.txt') -Encoding UTF8
+$hashes=Get-ChildItem -LiteralPath $release -File | Where-Object Name -ne 'SHA256SUMS.txt' | Sort-Object Name | ForEach-Object {((Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLower()+'  '+$_.Name)}
+[IO.File]::WriteAllText((Join-Path $release 'SHA256SUMS.txt'),($hashes -join "`n")+"`n",[Text.UTF8Encoding]::new($false))
 # Remove only the newly created, validated source staging directory.
 $resolved=[IO.Path]::GetFullPath($source)
 if(-not $resolved.StartsWith([IO.Path]::GetFullPath($release)+[IO.Path]::DirectorySeparatorChar) -or -not (Split-Path $resolved -Leaf).StartsWith('.source-')){throw 'Source staging path escaped release directory'}

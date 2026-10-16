@@ -237,6 +237,7 @@ pub fn register() -> Result<()> {
     Ok(())
 }
 pub fn unregister() -> Result<()> {
+    crate::desktop::unregister()?;
     set_auto_start(false)?;
     set_path(false)?;
     let current = RegKey::predef(HKEY_CURRENT_USER);

@@ -1,5 +1,6 @@
 #![windows_subsystem = "windows"]
 mod accessibility;
+mod alerts;
 mod render;
 mod ui;
 use windows::Win32::UI::WindowsAndMessaging::WM_APP;
@@ -37,6 +38,17 @@ fn main() {
     }
 }
 fn run() -> anyhow::Result<()> {
+    guard_platform::native_process::signal_started()?;
+    let mut args = std::env::args().skip(1).collect::<Vec<_>>();
+    // Descendants can inherit registry virtualization without package identity.
+    if !args.iter().any(|arg| arg == "--native-context") {
+        args.push("--native-context".into());
+        let mut child = guard_platform::native_process::spawn(&std::env::current_exe()?, &args)?;
+        if args.iter().any(|a| a == "--health-check") {
+            std::process::exit(child.wait()? as i32);
+        }
+        return Ok(());
+    }
     use guard_platform::{ipc, network::NetworkMonitor, Host};
     use guard_protocol::{Request, Settings};
     let runtime = tokio::runtime::Builder::new_multi_thread()

@@ -8,7 +8,7 @@ use std::{
     io::{Cursor, Read},
     os::windows::{fs::MetadataExt, process::CommandExt},
     path::Path,
-    process::{Command, Stdio},
+    process::Command,
     time::Duration,
 };
 use windows::{
@@ -60,6 +60,44 @@ fn validate_dir(path: &Path) -> Result<()> {
     Ok(())
 }
 fn run(args: &[String], quiet: bool) -> Result<()> {
+    guard_platform::native_process::signal_started()?;
+    if !args
+        .iter()
+        .any(|arg| arg == "--native-setup" || arg == "--check-payload")
+    {
+        let mut args = args.to_vec();
+        args.push("--native-setup".into());
+        let code =
+            guard_platform::native_process::spawn(&std::env::current_exe()?, &args)?.wait()?;
+        if code != 0 {
+            bail!("安装助手未完成，请查看守卫日志");
+        }
+        return Ok(());
+    }
+    if let Some(enable) = args.first().and_then(|arg| match arg.as_str() {
+        "--desktop-proxy-enable" => Some(true),
+        "--desktop-proxy-remove" => Some(false),
+        _ => None,
+    }) {
+        if !args.iter().any(|arg| arg == "--native-helper") {
+            let mut args = args.to_vec();
+            args.push("--native-helper".into());
+            let code =
+                guard_platform::native_process::spawn(&std::env::current_exe()?, &args)?.wait()?;
+            if code != 0 {
+                bail!("桌面代理助手执行失败");
+            }
+            return Ok(());
+        }
+        let value = |name: &str| {
+            args.iter()
+                .position(|arg| arg == name)
+                .and_then(|i| args.get(i + 1))
+        };
+        let port = value("--port").context("缺少守卫端口")?.parse()?;
+        let sid = value("--sid").context("缺少用户身份")?;
+        return guard_platform::desktop::elevated_policy(enable, port, sid);
+    }
     let current = std::env::current_exe()?;
     if args.iter().any(|a| a == "--check-payload") {
         validate_payload()?;
@@ -76,7 +114,7 @@ fn run(args: &[String], quiet: bool) -> Result<()> {
         fs::copy(&current, &helper)?;
         let mut command = Command::new(&helper);
         command
-            .args(args)
+            .args(guard_platform::native_process::forwarded_args(args))
             .args(["--wait-parent", &std::process::id().to_string()])
             .creation_flags(0x08000000)
             .spawn()?;
@@ -84,7 +122,7 @@ fn run(args: &[String], quiet: bool) -> Result<()> {
     }
     validate_dir(&install_dir())?;
     if uninstall {
-        if !quiet && message("卸载 Claude 网络守卫？\n\n请先在 Edge 和 Chrome 中移除配套扩展，浏览器才会恢复原有代理设置。\n用户设置和日志将保留。","卸载 Claude 网络守卫",MB_OKCANCEL|MB_ICONINFORMATION)!=IDOK{return Ok(());}
+        if !quiet && message("卸载 Claude 网络守卫？\n\n请先在 Edge 和 Chrome 中移除配套扩展。\nClaude 桌面的守卫代理将移除，重启客户端后恢复。\n用户设置和日志将保留。","卸载 Claude 网络守卫",MB_OKCANCEL|MB_ICONINFORMATION)!=IDOK{return Ok(());}
         stop()?;
         integration::unregister()?;
         if install_dir().exists() {
@@ -94,7 +132,7 @@ fn run(args: &[String], quiet: bool) -> Result<()> {
             let _ = integration::extension_guide("edge");
             let _ = integration::extension_guide("chrome");
             message(
-                "守卫已卸载。\n请在浏览器扩展页移除「Claude 网络守卫」。",
+                "守卫已卸载。\n请移除浏览器配套扩展，并重新启动 Claude 桌面。",
                 "卸载完成",
                 MB_OK,
             );
@@ -102,7 +140,7 @@ fn run(args: &[String], quiet: bool) -> Result<()> {
         return Ok(());
     }
     validate_payload()?;
-    if !quiet && message("安装 Claude 网络守卫？\n\n界面是一个小胶囊和四项菜单。\n新安装默认开机自启；升级保留已有选择。","Claude 网络守卫",MB_OKCANCEL|MB_ICONINFORMATION)!=IDOK{return Ok(());}
+    if !quiet && message("安装 Claude 网络守卫？\n\n通过小胶囊打开 Claude 桌面、Code 或网页。\n新安装默认开机自启；升级保留已有选择。","Claude 网络守卫",MB_OKCANCEL|MB_ICONINFORMATION)!=IDOK{return Ok(());}
     install(quiet)
 }
 fn archive() -> Result<zip::ZipArchive<Cursor<&'static [u8]>>> {
@@ -178,14 +216,8 @@ fn stop() -> Result<()> {
     std::thread::sleep(Duration::from_millis(500));
     process::stop_owned()
 }
-fn launch_installed() -> Result<std::process::Child> {
-    Ok(Command::new(desktop_exe())
-        .current_dir(install_dir())
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .creation_flags(0x08000000)
-        .spawn()?)
+fn launch_installed() -> Result<guard_platform::native_process::Child> {
+    guard_platform::native_process::spawn(&desktop_exe(), &["--native-context".into()])
 }
 fn install(quiet: bool) -> Result<()> {
     let target = install_dir();
@@ -288,7 +320,7 @@ fn install(quiet: bool) -> Result<()> {
         }
         return Err(error.context("升级未完成，已恢复先前安装"));
     }
-    log("Rust 2.0 安装完成；旧程序保存在相邻 rollback 目录");
+    log("Rust 安装完成；旧程序保存在相邻 rollback 目录");
     if !quiet {
         message(
             "安装完成。\n\n单击顶部胶囊打开菜单。\n首次打开网页时，按面板指引接入浏览器。",

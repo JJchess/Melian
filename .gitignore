@@ -23,6 +23,7 @@ tests/extension-tests/artifacts/
 
 # Per-user runtime data must not be committed.
 data-root.txt
+desktop-proxy.json
 settings.json
 .env
 .env.*

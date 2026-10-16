@@ -29,7 +29,7 @@ impl Default for Settings {
             proxy_port: 17890,
             preferred_node: None,
             claude_path: None,
-            sound_enabled: false,
+            sound_enabled: true,
             auto_start: true,
             island_left: None,
             island_top: None,
@@ -186,6 +186,7 @@ pub struct State {
     pub upstream_port: u16,
     pub proxy_port: u16,
     pub browsers: BTreeMap<String, BrowserState>,
+    pub desktop: DesktopState,
     pub allowed: bool,
     pub reason_code: String,
     pub suggested_action: String,
@@ -204,11 +205,22 @@ impl Default for State {
             upstream_port: 0,
             proxy_port: 17890,
             browsers: BTreeMap::new(),
+            desktop: DesktopState::default(),
             allowed: false,
             reason_code: "checking".into(),
             suggested_action: "recheck".into(),
         }
     }
+}
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default, rename_all = "camelCase")]
+pub struct DesktopState {
+    pub installed: bool,
+    pub configured: bool,
+    pub connected: bool,
+    pub running: bool,
+    pub restart_required: bool,
+    pub reason: String,
 }
 impl State {
     pub fn fresh_allowed(&self) -> bool {

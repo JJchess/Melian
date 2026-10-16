@@ -217,7 +217,7 @@ impl Renderer {
             );
         }
     }
-    pub fn continuous(&self, area: D2D_RECT_F, r: f32, hex: u32) -> Result<()> {
+    pub fn continuous(&self, area: D2D_RECT_F, r: f32, hex: u32, alpha: f32) -> Result<()> {
         unsafe {
             let (l, t, w, b) = (area.left, area.top, area.right, area.bottom);
             let geometry = self.factory.CreatePathGeometry()?;
@@ -249,7 +249,7 @@ impl Renderer {
             });
             sink.EndFigure(D2D1_FIGURE_END_CLOSED);
             sink.Close()?;
-            self.brush.SetColor(&color(hex, 1.));
+            self.brush.SetColor(&color(hex, alpha));
             self.dc.FillGeometry(&geometry, &self.brush, None);
             Ok(())
         }
@@ -297,6 +297,11 @@ impl Renderer {
             self.line((x + a.0, y + a.1), (x + b.0, y + b.1), hex, alpha, 1.25)
         };
         match id {
+            11 => {
+                self.outline(rect(x, y, 14., 10.), 2., hex, alpha);
+                line((7., 10.), (7., 14.));
+                line((3., 14.), (11., 14.));
+            }
             1 => {
                 line((1., 3.), (5., 7.));
                 line((5., 7.), (1., 11.));

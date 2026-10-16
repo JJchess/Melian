@@ -1,7 +1,9 @@
+pub mod desktop;
 pub mod host;
 pub mod integration;
 pub mod ipc;
 pub mod launch;
+pub mod native_process;
 pub mod network;
 pub mod startup;
 pub use host::Host;

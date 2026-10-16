@@ -54,7 +54,9 @@ pub async fn write<T: Serialize>(stream: &mut (impl AsyncWrite + Unpin), value: 
     Ok(())
 }
 pub async fn send(request: Request) -> Result<Response> {
-    let duration = if request.action == "switchPreferred" {
+    let duration = if request.action == "launchDesktop" {
+        180
+    } else if request.action == "switchPreferred" {
         15
     } else {
         3

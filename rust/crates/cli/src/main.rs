@@ -27,7 +27,7 @@ async fn run(mut args: Vec<String>) -> Result<i32> {
         return bridge::run().await;
     }
     if args.first().is_some_and(|s| s == "--guard-help") {
-        println!("claude-guard [--cwd 目录] [--] Claude 参数\n--status  --recheck  --show  --open-web\n仅支持从此入口启动的 Windows 前台 Claude Code。");
+        println!("claude-guard [--cwd 目录] [--] Claude Code 参数\n--desktop 打开 Claude 桌面\n--status  --recheck  --show  --open-web\n桌面接入需要新版官方 MSIX 安装；Code 命令仅支持 Windows 前台会话。");
         return Ok(0);
     }
     if let Some(action) = args.first().and_then(|s| match s.as_str() {
@@ -35,6 +35,7 @@ async fn run(mut args: Vec<String>) -> Result<i32> {
         "--recheck" => Some("recheck"),
         "--show" => Some("show"),
         "--open-web" => Some("openWeb"),
+        "--desktop" => Some("launchDesktop"),
         _ => None,
     }) {
         let response = ipc::send(Request::action(action)).await?;
