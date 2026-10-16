@@ -24,7 +24,8 @@ $installer=Join-Path $folder $name
 if((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash -ne $checksums[0].Substring(0,64)){throw 'Checksum verification failed. Nothing was installed.'}
 if($DownloadOnly){
     New-Item -ItemType Directory -Path $Destination -Force|Out-Null
-    Copy-Item -LiteralPath $installer -Destination (Join-Path $Destination $name) -Force
+    # Copy verified bytes, not EFS attributes from a redirected app-local cache.
+    [IO.File]::WriteAllBytes((Join-Path $Destination $name),[IO.File]::ReadAllBytes($installer))
     Write-Host ('Verified: '+(Join-Path $Destination $name))
 }else{
     Write-Host ('Verified Melian '+$release.tag_name+'. Opening the installer...')

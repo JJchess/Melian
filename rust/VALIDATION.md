@@ -2,6 +2,8 @@
 
 2026-10-16，提交 `b0a0be4` 的 [完整 CI](https://github.com/JJchess/Melian/actions/runs/38896202361) 已通过。
 
+正式 `v2.2.0` 的 [发布 CI](https://github.com/JJchess/Melian/actions/runs/38897552766) 同样全部通过，并增加了 Mac 运行中升级的等待退出检查。已使用 Windows 自带 PowerShell 5.1 从公开 Release 下载并通过 SHA-256 校验；只下载模式改为复制已验证的文件字节，避免跨卷导出时继承应用缓存的 EFS 属性。
+
 | 平台 | Rust 测试 | 扩展测试 | 构建与集成 |
 | --- | --- | --- | --- |
 | Windows x64 | 73 通过 | 16 通过 | 原生安装器生成、内嵌载荷检查通过 |
