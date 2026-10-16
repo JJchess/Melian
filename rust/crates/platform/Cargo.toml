@@ -1,0 +1,16 @@
+[package]
+name = "guard-platform"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+winreg = "0.55"
+guard-protocol.workspace = true
+anyhow.workspace = true
+windows.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+guard-core.workspace = true
+uuid.workspace = true
+tokio-util.workspace = true
+serde.workspace = true

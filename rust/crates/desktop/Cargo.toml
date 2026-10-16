@@ -1,0 +1,16 @@
+[package]
+name = "ClaudeGuard"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+windows-core = "0.58"
+guard-protocol.workspace = true
+anyhow.workspace = true
+windows.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+guard-platform.workspace = true
+guard-core.workspace = true
+uuid.workspace = true
+tokio-util.workspace = true

@@ -1,0 +1,21 @@
+[package]
+name = "guard-core"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+guard-protocol.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+chrono.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hex.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+reqwest.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+http-body-util.workspace = true
+socket2.workspace = true
+windows.workspace = true
+

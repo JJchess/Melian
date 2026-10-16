@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>连接已暂停 · Claude 网络守卫</title><link rel="stylesheet" href="ui.css"></head>
+<body class="page"><main>
+  <header><span class="brand-dot"></span><strong>CLAUDE GUARD</strong><span class="tag" id="browser">浏览器</span></header>
+  <p class="eyebrow">受保护连接</p><h1>连接已暂停</h1>
+  <p>网络检查尚未通过。请开启 Clash 全局代理并选择美国节点，等待守卫确认代理 IP 属地为美国后，再重试访问。</p>
+  <div class="status-card"><h2 id="status">正在连接</h2><p id="reason">正在读取桌面守卫状态…</p><dl><div><dt>节点</dt><dd id="node">—</dd></div><div><dt>代理 IP 属地</dt><dd id="country">—</dd></div><div><dt>上次验证</dt><dd id="verifiedAt">—</dd></div></dl></div>
+  <div class="actions horizontal"><button id="recheck" class="primary">重新检查</button><button id="retry">重试访问</button><button id="switchPreferred">切换首选美国节点</button><button id="back">返回</button></div>
+  <p id="feedback" role="status"></p><a href="install.html">查看安装与排查说明</a>
+  <p class="footnote">网络故障也可能导致此页面。状态恢复后重试即可；本页不会自动刷新或发送原请求。</p>
+</main><script type="module" src="ui.mjs"></script></body></html>

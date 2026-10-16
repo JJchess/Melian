@@ -1,0 +1,31 @@
+**/bin/
+**/obj/
+artifacts/
+*.user
+*.suo
+tests/extension-tests/.smoke-profile-*/
+rust/target/
+rust/.tools/
+rust/dist/
+
+# Browser-generated data and local verification output.
+extension/_metadata/
+tests/extension-tests/artifacts/
+**/node_modules/
+
+# The retired .NET implementation is kept locally as a rollback archive.
+/src/
+/tests/ClaudeGuard.Core.Tests/
+/tests/ClaudeGuard.Host.Tests/
+/ClaudeGuard.sln
+/Directory.Build.props
+/rollback-dotnet/
+
+# Per-user runtime data must not be committed.
+data-root.txt
+settings.json
+.env
+.env.*
+
+# Packaging uses temporary source directories inside release/.
+/release/**/.source-*/

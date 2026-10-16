@@ -1,0 +1,16 @@
+[package]
+name = "guard-setup"
+version.workspace = true
+edition.workspace = true
+[features]
+fault-injection = []
+[dependencies]
+winreg = "0.55"
+guard-protocol.workspace = true
+anyhow.workspace = true
+windows.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+guard-platform.workspace = true
+zip.workspace = true

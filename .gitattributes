@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.exe binary
+*.zip binary
+
+# Preserve published checksums on every platform.
+release/** -text

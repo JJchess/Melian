@@ -1,0 +1,5 @@
+{
+  "name": "claude-guard-extension-tests",
+  "private": true,
+  "scripts": { "test": "node --experimental-vm-modules --test *.test.mjs" }
+}
