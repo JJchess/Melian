@@ -96,6 +96,8 @@ pub fn run(host: Arc<Host>, events: UnboundedReceiver<UiEvent>) -> Result<()> {
             lpfnWndProc: Some(window_proc),
             hInstance: module.into(),
             hCursor: cursor,
+            hIcon: crate::icons::app_icon(GetSystemMetrics(SM_CXICON))?,
+            hIconSm: crate::icons::app_icon(GetSystemMetrics(SM_CXSMICON))?,
             lpszClassName: w!("ClaudeGuard.Rust.Island"),
             ..Default::default()
         };
@@ -1005,7 +1007,7 @@ impl App {
                 uID: 1,
                 uFlags: NIF_MESSAGE | NIF_ICON | NIF_TIP,
                 uCallbackMessage: TRAY,
-                hIcon: LoadIconW(None, IDI_APPLICATION).unwrap_or_default(),
+                hIcon: crate::icons::app_icon(GetSystemMetrics(SM_CXSMICON)).unwrap_or_default(),
                 ..Default::default()
             };
             let tip = wide("Claude 网络守卫");

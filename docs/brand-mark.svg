@@ -1,12 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80" role="img" aria-labelledby="title">
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title description">
   <title id="title">Melian</title>
+  <desc id="description">深色圆角底上的银白双拱 M，中央有一枚薄荷色四角星。</desc>
   <defs>
-    <linearGradient id="surface" x2="0.8" y2="1">
-      <stop stop-color="#292e30"/>
-      <stop offset="1" stop-color="#101214"/>
+    <linearGradient id="surface" x1="0" y1="0" x2="0.8" y2="1">
+      <stop stop-color="#2d3c3d"/>
+      <stop offset="0.55" stop-color="#152021"/>
+      <stop offset="1" stop-color="#0b1012"/>
+    </linearGradient>
+    <linearGradient id="silver" x1="0" y1="0" x2="0.7" y2="1">
+      <stop stop-color="#ffffff"/>
+      <stop offset="0.55" stop-color="#e4eee9"/>
+      <stop offset="1" stop-color="#aec8bd"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#829b91" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#4b6258" stop-opacity="0.25"/>
     </linearGradient>
   </defs>
-  <rect x="1" y="1" width="78" height="78" rx="24" fill="url(#surface)" stroke="#424a48"/>
-  <path d="M23 53V28L40 45 57 28V53" fill="none" stroke="#e7eeea" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="58" cy="20" r="5" fill="#83d7b0"/>
+  <rect x="10" y="10" width="236" height="236" rx="57" fill="url(#surface)" stroke="url(#edge)" stroke-width="2"/>
+  <path d="M65 177V99C65 82 82 75 94 88L128 126 162 88C174 75 191 82 191 99V177" fill="none" stroke="url(#silver)" stroke-width="19" stroke-linecap="round" stroke-linejoin="round"/>
+  <path id="star" d="M128 155C130 168 134 172 147 174C134 176 130 180 128 193C126 180 122 176 109 174C122 172 126 168 128 155Z" fill="#93ddbe"/>
 </svg>

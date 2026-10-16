@@ -132,6 +132,7 @@ fn create_shortcuts() -> Result<()> {
             }
             let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)?;
             link.SetPath(PCWSTR(wide(desktop_exe()).as_ptr()))?;
+            link.SetIconLocation(PCWSTR(wide(desktop_exe()).as_ptr()), 0)?;
             link.SetWorkingDirectory(PCWSTR(wide(install_dir()).as_ptr()))?;
             link.SetDescription(PCWSTR(wide("Claude 网络守卫").as_ptr()))?;
             let persist: IPersistFile = link.cast()?;

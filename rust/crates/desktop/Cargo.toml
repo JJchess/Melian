@@ -14,3 +14,5 @@ guard-platform.workspace = true
 guard-core.workspace = true
 uuid.workspace = true
 tokio-util.workspace = true
+[build-dependencies]
+winresource = "0.1.34"

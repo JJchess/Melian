@@ -1,6 +1,7 @@
 #![windows_subsystem = "windows"]
 mod accessibility;
 mod alerts;
+mod icons;
 mod render;
 mod ui;
 use windows::Win32::UI::WindowsAndMessaging::WM_APP;

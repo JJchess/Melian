@@ -1,4 +1,8 @@
+#[path = "../windows_resources.rs"]
+mod windows_resources;
+
 fn main() {
+    windows_resources::embed("Melian Setup", "Melian.Setup.exe");
     println!("cargo:rerun-if-env-changed=CLAUDE_GUARD_PAYLOAD");
     let destination =
         std::path::PathBuf::from(std::env::var_os("OUT_DIR").unwrap()).join("payload.zip");

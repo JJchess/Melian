@@ -14,3 +14,5 @@ serde_json.workspace = true
 chrono.workspace = true
 guard-platform.workspace = true
 zip.workspace = true
+[build-dependencies]
+winresource = "0.1.34"
