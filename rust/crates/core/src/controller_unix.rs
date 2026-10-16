@@ -50,6 +50,10 @@ fn candidates(name: &str) -> Vec<Endpoint> {
             secret,
         }];
     }
+    if explicit != "verge-mihomo" {
+        // An invalid explicit endpoint must not silently select another client.
+        return vec![];
+    }
     let mut paths = vec![
         PathBuf::from("/tmp/verge/verge-mihomo.sock"),
         PathBuf::from("/var/tmp/verge/verge-mihomo.sock"),

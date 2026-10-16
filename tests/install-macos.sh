@@ -46,6 +46,29 @@ codesign --verify --deep --strict "$app"
 [[ -L "$HOME/.local/bin/melian" && -L "$HOME/.local/bin/claude-guard" && -f "$agent" ]]
 [[ "$(plutil -extract RunAtLoad raw -o - "$agent")" == true ]]
 
+# Start the actual app, query IPC and prove the proxy defaults to denial with no
+# controller present. No real Claude credentials or external requests are used.
+"$app/Contents/MacOS/ClaudeGuard" > "$fixture/app.log" 2>&1 &
+guard_pid=$!
+for attempt in {1..40}; do
+  if "$app/Contents/MacOS/claude-guard" --status > "$fixture/status.json" 2>/dev/null; then break; fi
+  sleep 0.25
+done
+node - "$fixture/status.json" <<'JS'
+const fs = require('node:fs'), assert = require('node:assert/strict');
+const value = JSON.parse(fs.readFileSync(process.argv[2]));
+assert.equal(value.ok, true); assert.equal(value.state.allowed, false);
+JS
+result="$(/usr/bin/curl --silent --max-time 3 --noproxy '' --proxy http://127.0.0.1:17890 --output /dev/null --write-out '%{http_code}' http://127.0.0.1:9/)"
+[[ "$result" == 503 ]]
+"$app/Contents/MacOS/claude-guard" --quit
+for attempt in {1..40}; do
+  if ! kill -0 "$guard_pid" 2>/dev/null; then break; fi
+  sleep 0.25
+done
+if kill -0 "$guard_pid" 2>/dev/null; then kill "$guard_pid"; echo 'App did not exit.' >&2; exit 1; fi
+wait "$guard_pid"
+
 # Upgrade must preserve a disabled auto-start preference and original CLI args.
 node - "$settings" <<'JS'
 const fs = require('node:fs'); const file = process.argv[2];

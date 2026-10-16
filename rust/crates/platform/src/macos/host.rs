@@ -36,14 +36,39 @@ impl Host {
             loop {
                 tokio::select! {_=host.engine.stop.cancelled()=>break,next=server.listener.accept()=>{
                     let Ok((mut stream,_))=next else{break};let host=host.clone();
-                    tokio::spawn(async move{if ipc::check_peer(&stream).is_err(){return;}let _=tokio::time::timeout(Duration::from_secs(20),async{
-                        let Some(request)=ipc::read::<Request>(&mut stream).await? else{return Ok::<_,anyhow::Error>(());};
-                        if request.action=="subscribe"{loop{let state=Response{state:Some(host.state()),..Response::default()};ipc::write(&mut stream,&state).await?;tokio::select!{_=host.engine.stop.cancelled()=>break,_=tokio::time::sleep(Duration::from_secs(1))=>{}}}return Ok(());}
-                        let response=host.handle(request).await;ipc::write(&mut stream,&response).await
-                    }).await;});
+                    tokio::spawn(async move {
+                        let _ = host.connection(&mut stream).await;
+                    });
                 }}
             }
         });
+    }
+    async fn connection(&self, stream: &mut tokio::net::UnixStream) -> Result<()> {
+        ipc::check_peer(stream)?;
+        let Some(request) =
+            tokio::time::timeout(Duration::from_secs(10), ipc::read::<Request>(stream)).await??
+        else {
+            return Ok(());
+        };
+        if request.action == "subscribe" {
+            loop {
+                let response = Response {
+                    state: Some(self.state()),
+                    ..Response::default()
+                };
+                tokio::time::timeout(Duration::from_secs(5), ipc::write(stream, &response))
+                    .await??;
+                tokio::select! {
+                    _ = self.engine.stop.cancelled() => break,
+                    _ = tokio::time::sleep(Duration::from_secs(1)) => {}
+                }
+            }
+        } else {
+            let response =
+                tokio::time::timeout(Duration::from_secs(20), self.handle(request)).await?;
+            tokio::time::timeout(Duration::from_secs(5), ipc::write(stream, &response)).await??;
+        }
+        Ok(())
     }
     pub async fn handle(&self, request: Request) -> Response {
         let mut response = Response::default();

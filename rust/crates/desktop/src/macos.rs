@@ -417,7 +417,15 @@ impl IslandView {
                     }
                 }
                 self.ivars().state.borrow().host.engine.shutdown();
-                NSApplication::sharedApplication(self.mtm()).stop(None);
+                let application = NSApplication::sharedApplication(self.mtm());
+                application.stop(None);
+                // stop: from a timer needs an event to wake nextEventMatchingMask:.
+                if let Some(event) = NSEvent::otherEventWithType_location_modifierFlags_timestamp_windowNumber_context_subtype_data1_data2(
+                    NSEventType::ApplicationDefined, NSPoint::new(0., 0.),
+                    NSEventModifierFlags::empty(), 0., 0, None, 0, 0, 0,
+                ) {
+                    application.postEvent_atStart(&event, true);
+                }
             }
             return;
         }
