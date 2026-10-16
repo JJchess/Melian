@@ -34,6 +34,8 @@ try{
     Run-Cargo @('build','--release','--locked','-p','ClaudeGuard','-p','claude-guard')
     $payload=Join-Path $dist ('payload-'+[DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss'))
     New-Item -ItemType Directory -Force (Join-Path $payload 'cli'),(Join-Path $payload 'extension') | Out-Null
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'LICENSE') -Destination $payload
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'LICENSE') -Destination (Join-Path $payload 'extension')
     Copy-Item -LiteralPath (Join-Path $rustRoot 'target\release\ClaudeGuard.exe') -Destination $payload
     Copy-Item -LiteralPath (Join-Path $rustRoot 'target\release\claude-guard.exe') -Destination (Join-Path $payload 'cli')
     Get-ChildItem -LiteralPath (Join-Path $projectRoot 'extension') -File | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $payload 'extension')}

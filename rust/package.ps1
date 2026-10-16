@@ -9,9 +9,10 @@ foreach($name in @('Cargo.toml','Cargo.lock','README.zh-CN.md','VALIDATION.md','
 Get-ChildItem -LiteralPath $PSScriptRoot -Filter '*.ps1' -File|ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $source 'rust')}
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'crates') -Destination (Join-Path $source 'rust') -Recurse
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot '.cargo/config.toml') -Destination (Join-Path $source 'rust/.cargo')
-foreach($name in @('README.md','VALIDATION.md','build.ps1','.gitignore','.gitattributes')){Copy-Item -LiteralPath (Join-Path $project $name) -Destination $source}
+foreach($name in @('README.md','LICENSE','VALIDATION.md','build.ps1','.gitignore','.gitattributes')){Copy-Item -LiteralPath (Join-Path $project $name) -Destination $source}
 Copy-Item -LiteralPath (Join-Path $project 'docs') -Destination $source -Recurse
 Get-ChildItem -LiteralPath (Join-Path $project 'extension') -File | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $source 'extension')}
+Copy-Item -LiteralPath (Join-Path $project 'LICENSE') -Destination (Join-Path $source 'extension')
 Get-ChildItem -LiteralPath (Join-Path $project 'tests/extension-tests') -Filter '*.mjs' -File | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $source 'tests/extension-tests')}
 foreach($pair in @(@($source,'ClaudeGuard.Source.zip'),@((Join-Path $source 'extension'),'ClaudeGuard.Extension.zip'))){
     $zip=Join-Path $release $pair[1]
@@ -21,6 +22,7 @@ foreach($pair in @(@($source,'ClaudeGuard.Source.zip'),@((Join-Path $source 'ext
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'dist/ClaudeGuard.Setup.exe') -Destination $release -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'README.zh-CN.md') -Destination (Join-Path $release '使用说明.md') -Force
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'VALIDATION.md') -Destination (Join-Path $release '验收记录.md') -Force
+Copy-Item -LiteralPath (Join-Path $project 'LICENSE') -Destination $release -Force
 $hashes=Get-ChildItem -LiteralPath $release -File | Where-Object Name -ne 'SHA256SUMS.txt' | Sort-Object Name | ForEach-Object {((Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLower()+'  '+$_.Name)}
 [IO.File]::WriteAllText((Join-Path $release 'SHA256SUMS.txt'),($hashes -join "`n")+"`n",[Text.UTF8Encoding]::new($false))
 # Remove only the newly created, validated source staging directory.

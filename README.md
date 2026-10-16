@@ -8,6 +8,7 @@
     <img src="https://img.shields.io/badge/native-Rust-17191c?style=flat-square&amp;logo=rust&amp;logoColor=white" alt="Rust 原生应用" />
     <img src="https://img.shields.io/badge/UI-Win32_%2B_DirectComposition-17191c?style=flat-square" alt="Win32 与 DirectComposition" />
     <img src="https://img.shields.io/badge/status-2.2_开发中-83d7b0?style=flat-square" alt="2.2 开发中" />
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-17191c?style=flat-square" alt="Apache License 2.0" /></a>
   </p>
   <p>
     <a href="#功能">功能</a> ·
@@ -212,6 +213,12 @@ node tests/extension-tests/run.mjs
 ## 致谢
 
 原生界面与系统集成基于 [windows-rs](https://github.com/microsoft/windows-rs)，异步网络使用 [Tokio](https://github.com/tokio-rs/tokio)，代理控制对接 [Mihomo](https://github.com/MetaCubeX/mihomo)。README 的内容组织参考了 [CCBaga](https://github.com/liseami/CCBaga)，图形资源为本项目制作。
+
+## 许可证
+
+Copyright © 2026 Melian contributors.
+
+本项目采用 [Apache License 2.0](LICENSE)。第三方依赖保留各自的许可证。
 
 <div align="center">
   <sub>Melian 是独立项目，与 Anthropic 无隶属关系。</sub>

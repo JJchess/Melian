@@ -2,6 +2,7 @@
 name = "guard-core"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 [dependencies]
 guard-protocol.workspace = true
 anyhow.workspace = true
