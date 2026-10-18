@@ -114,6 +114,7 @@ impl Sessions {
     }
 }
 pub struct Host {
+    pub codex: Arc<crate::codex::Monitor>,
     pub engine: Arc<Engine>,
     sessions: Mutex<Sessions>,
     desktop: Mutex<DesktopState>,
@@ -125,6 +126,7 @@ pub struct Host {
 impl Host {
     pub fn new(engine: Arc<Engine>, ui: UnboundedSender<UiEvent>) -> Arc<Self> {
         Arc::new(Self {
+            codex: crate::codex::Monitor::new(),
             engine,
             sessions: Mutex::new(Sessions::default()),
             desktop: Mutex::new(DesktopState::default()),
@@ -136,6 +138,7 @@ impl Host {
     }
     pub fn state(&self) -> State {
         let mut state = self.engine.state();
+        state.codex = Some(self.codex.state());
         self.sessions.lock().unwrap().merge(&mut state);
         for (name, native) in self.native_browsers.lock().unwrap().iter() {
             if native.configured || !state.browsers.get(name).is_some_and(|s| s.connected) {
@@ -309,6 +312,8 @@ impl Host {
     }
     pub async fn dispatch(&self, r: Request) -> Result<Response> {
         match r.action.as_str() {
+            "codexRefresh" => self.codex.refresh(),
+            "codexRead" => self.codex.mark_read(),
             "status" => {
                 let state = self.state();
                 let command = r.client_id.as_ref().and_then(|id| {
@@ -364,6 +369,7 @@ impl Host {
     }
     pub fn start(self: &Arc<Self>) -> Result<()> {
         let first = ipc::create_server(&pipe_path(), true)?;
+        self.codex.start(self.engine.stop.clone());
         let monitor = self.clone();
         std::thread::spawn(move || {
             let mut watcher = desktop::StartWatch::new();

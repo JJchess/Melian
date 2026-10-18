@@ -28,3 +28,6 @@ macOS 13 及更新版本；提供 Apple 芯片与 Intel 原生构建。当前版
 ## 验证边界
 
 macOS CI 构建与测试覆盖独立的 arm64 / x64 目标，并实际创建 AppKit 窗口和导出渲染图。真实 Claude 登录、物理多屏、睡眠恢复、辅助功能及重新登录自启需要实机验收；未执行前不标记为通过。
+# Codex 监测（2.3.0）
+
+Mac 与 Windows 使用同一只读监测模块。点击菜单里的 Codex 查看额度、正常重置时间和 Tibo 公告；自动发现 Codex.app 或常见 CLI 安装，复用其登录。公告来源为 codex-reset.com。完整说明见 [Codex 使用说明](CODEX.md)。

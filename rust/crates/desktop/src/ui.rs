@@ -40,6 +40,7 @@ enum View {
     Menu,
     Guide,
     Details,
+    Codex,
 }
 #[derive(Clone)]
 struct Hit {
@@ -87,6 +88,9 @@ struct App {
     hook: HHOOK,
     closing: bool,
     web_busy: bool,
+    codex_page: usize,
+    codex_preview: Option<guard_protocol::codex::CodexState>,
+    codex_notifications: guard_platform::codex::presentation::NotificationCursor,
     route_failed: Option<String>,
 }
 pub fn run(host: Arc<Host>, events: UnboundedReceiver<UiEvent>) -> Result<()> {
@@ -168,6 +172,9 @@ pub fn run(host: Arc<Host>, events: UnboundedReceiver<UiEvent>) -> Result<()> {
             hook: HHOOK::default(),
             closing: false,
             web_busy: false,
+            codex_page: 0,
+            codex_preview: if std::env::args().any(|a|a=="--preview") && std::env::args().any(|a|a=="--preview-codex") {Some(guard_platform::codex::presentation::preview())}else{None},
+            codex_notifications: Default::default(),
             route_failed: None,
         });
         let hwnd = CreateWindowExW(
@@ -208,6 +215,9 @@ pub fn run(host: Arc<Host>, events: UnboundedReceiver<UiEvent>) -> Result<()> {
             });
         }
         SetTimer(hwnd, STATUS_TIMER, 250, None);
+        if app.codex_preview.is_some() {
+            app.open(false);app.view=View::Codex;app.animate();
+        }
         let mut message = MSG::default();
         while GetMessageW(&mut message, None, 0, 0).as_bool() {
             let _ = TranslateMessage(&message);
@@ -264,6 +274,7 @@ impl App {
             return self.collapsed_size().1;
         }
         match self.view {
+            View::Codex => 424.,
             View::Guide => {
                 if guard_platform::browser::AUTOMATIC_ENROLLMENT_ENABLED {
                     358.
@@ -274,9 +285,9 @@ impl App {
             View::Details => 390.,
             View::Menu => {
                 if self.problem() {
-                    378.
+                    416.
                 } else {
-                    268.
+                    306.
                 }
             }
         }
@@ -379,7 +390,7 @@ impl App {
                 );
                 self.anchor.1 = self.anchor.1.clamp(
                     monitor.rcWork.top as f64,
-                    (monitor.rcWork.bottom as f64 - 390. * self.scale() as f64)
+                    (monitor.rcWork.bottom as f64 - 432. * self.scale() as f64)
                         .max(monitor.rcWork.top as f64),
                 );
             }
@@ -488,8 +499,9 @@ impl App {
         if self.closing {
             return;
         }
-        let next = self.host.state();
-        let signature = format!(
+        let mut next = self.host.state();
+        if let Some(fixture)=&self.codex_preview {next.codex=Some(fixture.clone());}
+        let mut signature = format!(
             "{}|{}|{}|{}|{}|{}|{}|{}",
             next.status,
             next.reason_code,
@@ -520,8 +532,23 @@ impl App {
             }
         );
         let was_problem = self.problem();
+        signature.push_str(&serde_json::to_string(&next.codex).unwrap_or_default());
+        if self.expanded && self.view == View::Codex {
+            signature.push_str(&(chrono::Utc::now().timestamp()/60).to_string());
+        }
         let was_blocked = self.blocked();
         self.state = next;
+        if self.codex_notifications.should_peek(self.state.codex.as_ref(), self.state.allowed, self.expanded) {
+            self.open(false);
+            self.view = View::Codex;
+            self.peek_until = Some(Instant::now() + Duration::from_secs(6));
+            self.animate();
+        }
+        if self.blocked() && self.view == View::Codex && self.peek_until.is_some() {
+            self.view = View::Menu;
+            self.peek_until = Some(Instant::now() + Duration::from_secs(12));
+            self.animate();
+        }
         if self.alerts.update(
             self.state.allowed,
             self.blocked(),
@@ -668,13 +695,14 @@ impl App {
                             "使用现有浏览器和登录状态，首次点击自动启用网页保护。"
                         },
                     );
+                    self.row(14, &guard_platform::codex::presentation::menu(self.state.codex.as_ref()), 166. + error_y, None);
                     self.row(
                         3,
                         "开机自启",
-                        176. + error_y,
+                        214. + error_y,
                         Some(self.host.engine.settings().auto_start),
                     );
-                    self.row(4, "退出", 214. + error_y, None);
+                    self.row(4, "退出", 252. + error_y, None);
                 }
                 View::Guide => {
                     if !guard_platform::browser::AUTOMATIC_ENROLLMENT_ENABLED {
@@ -715,6 +743,16 @@ impl App {
                 View::Details => {
                     self.row(12, "管理网页保护", 292., None);
                     self.row(10, "返回", 334., None);
+                }
+                View::Codex => {
+                    let d = guard_platform::codex::presentation::details(self.state.codex.as_ref(), self.codex_page, chrono::Utc::now());
+                    if d.pages > 1 {
+                        self.row(18, &format!("额度 {}/{}  ›", self.codex_page % d.pages + 1, d.pages), 132., None);
+                    }
+                    self.row(16, "来源：codex-reset.com", 272., None);
+                    if d.post.is_some() { self.row(17, "查看 X 原帖 ↗", 302., None); }
+                    self.row(15, &format!("刷新 · {}",d.checked), 340., None);
+                    self.row(10, "返回", 378., None);
                 }
             }
         }
@@ -793,6 +831,9 @@ impl App {
             dot_color,
             1.,
         );
+        if self.state.codex.as_ref().is_some_and(|c|c.unread) && !self.expanded {
+            r.dot(self.width - 8., 13., 2.5, 0x9cafff, 1.);
+        }
         r.text(
             if blocked {
                 "Melian · 连接受阻"
@@ -846,12 +887,24 @@ impl App {
                         r.rounded(rect(23., 101., 210., 32.), 10., 0x1e1e22, a);
                     }
                     r.line(
-                        (24., 169. + error_y),
-                        (232., 169. + error_y),
+                        (24., 207. + error_y),
+                        (232., 207. + error_y),
                         0xffffff,
                         0.07 * a,
                         1.,
                     );
+                }
+                View::Codex => {
+                    let d = guard_platform::codex::presentation::details(self.state.codex.as_ref(), self.codex_page, chrono::Utc::now());
+                    let title = self.state.codex.as_ref().filter(|c|c.unread && self.peek_until.is_some()).map(|c|c.notification.as_str()).filter(|t|!t.is_empty()).unwrap_or("Codex");
+                    r.text(title, rect(24., 45., 208., 24.), 0xf4f4f5, a, 2);
+                    r.text(&d.quota, rect(24., 74., 208., 22.), 0xe4e4ec, a, 1);
+                    r.text(&d.reset, rect(24., 98., 208., 32.), 0xa9a9b5, a, 1);
+                    if d.pages == 1 {r.text(&d.checked, rect(24., 132., 208., 28.), 0x777780, a, 1);}
+                    r.line((24., 166.), (232., 166.), 0xffffff, 0.07*a, 1.);
+                    r.text(&d.announcement, rect(24., 173., 208., 22.), 0xc9cfff, a, 1);
+                    r.text(&d.summary, rect(24., 198., 208., 42.), 0xc8c8d0, a, 1);
+                    r.text(&d.expected, rect(24., 241., 208., 30.), 0x92929e, a, 1);
                 }
                 View::Guide if !guard_platform::browser::AUTOMATIC_ENROLLMENT_ENABLED => {
                     r.text(
@@ -1075,7 +1128,10 @@ impl App {
                 })
                 .collect();
             data.focused = self.focus;
-            data.status = if self.state.allowed {
+            data.status = if self.expanded && self.view == View::Codex {
+                let d=guard_platform::codex::presentation::details(self.state.codex.as_ref(),self.codex_page,chrono::Utc::now());
+                format!("{}。{}。{}。{}。{}",d.quota,d.reset,d.checked,d.summary,d.expected)
+            } else if self.state.allowed {
                 "网络检查通过。展开查看各入口的接入状态。".into()
             } else {
                 self.state.reason.clone()
@@ -1125,6 +1181,32 @@ impl App {
             return;
         }
         match id {
+            14 => {
+                self.host.codex.mark_read();
+                self.host.codex.refresh();
+                self.state = self.host.state();
+                self.view = View::Codex;
+                self.codex_page = 0;
+                self.expanded = true;
+                self.animate();
+            }
+            15 => {
+                self.host.codex.mark_read();
+                self.host.codex.refresh();
+            }
+            16 | 17 => {
+                self.host.codex.mark_read();
+                let d = guard_platform::codex::presentation::details(self.state.codex.as_ref(), self.codex_page, chrono::Utc::now());
+                let url = if id == 16 {Some(guard_platform::codex::announcements::SOURCE.to_string())} else {d.post};
+                if let Some(url) = url {
+                    let _ = launch::shell_open(std::path::Path::new(&url), &[], None);
+                }
+            }
+            18 => {
+                self.host.codex.mark_read();
+                self.codex_page += 1;
+                let _ = self.draw();
+            }
             0 => {
                 if self.expanded {
                     self.collapse()
@@ -1541,6 +1623,7 @@ unsafe extern "system" fn window_proc(
             app.animations = animations_enabled();
         }
         WM_POWERBROADCAST => {
+            app.host.codex.refresh();
             app.host.engine.invalidate();
             return LRESULT(1);
         }

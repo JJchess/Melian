@@ -2,6 +2,7 @@
 pub mod browser;
 #[cfg(windows)]
 pub mod browser_pac;
+pub mod codex;
 #[cfg(windows)]
 pub mod desktop;
 #[cfg(windows)]

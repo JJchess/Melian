@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+pub mod codex;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -226,6 +227,8 @@ pub struct BrowserState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct State {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub codex: Option<codex::CodexState>,
     pub status: String,
     pub reason: String,
     pub mode: String,
@@ -245,6 +248,7 @@ pub struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
+            codex: None,
             status: "checking".into(),
             reason: "正在检查连接".into(),
             mode: String::new(),

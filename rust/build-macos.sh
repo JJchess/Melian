@@ -15,6 +15,7 @@ app="$stage/Melian.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/Melian.iconset" "$root/rust/dist"
 cp "target/$target/release/ClaudeGuard" "target/$target/release/claude-guard" "$app/Contents/MacOS/"
 cp "$root/LICENSE" "$root/docs/MACOS.md" "$app/Contents/Resources/"
+cp "$root/docs/CODEX.md" "$app/Contents/Resources/"
 version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -1)"
 cat > "$app/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -48,6 +49,9 @@ codesign --verify --deep --strict "$app"
 node - "$app/Contents/MacOS/ClaudeGuard" "$root/rust/dist/macos-preview-$asset.png" <<'JS'
 const { spawnSync } = require('node:child_process');
 const { statSync } = require('node:fs');
+const codexOutput=process.argv[3].replace('.png','-codex.png');
+const codex=spawnSync(process.argv[2], ['--smoke-test','--preview-codex','--preview-output',codexOutput], {stdio:'inherit',timeout:20000});
+if(codex.error || codex.status!==0 || statSync(codexOutput).size<100) throw new Error('Codex AppKit preview failed');
 const result = spawnSync(process.argv[2], ['--smoke-test', '--preview-output', process.argv[3]], { stdio: 'inherit', timeout: 20000 });
 if (result.error) throw result.error;
 if (result.status !== 0) throw new Error(`AppKit smoke exited ${result.status} / ${result.signal}`);

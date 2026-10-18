@@ -11,15 +11,21 @@ pub enum UiEvent {
     Feedback(String),
 }
 pub struct Host {
+    pub codex: Arc<crate::codex::Monitor>,
     pub engine: Arc<Engine>,
     pub ui: UnboundedSender<UiEvent>,
 }
 impl Host {
     pub fn new(engine: Arc<Engine>, ui: UnboundedSender<UiEvent>) -> Arc<Self> {
-        Arc::new(Self { engine, ui })
+        Arc::new(Self {
+            codex: crate::codex::Monitor::new(),
+            engine,
+            ui,
+        })
     }
     pub fn state(&self) -> State {
         let mut state = self.engine.state();
+        state.codex = Some(self.codex.state());
         state.desktop.reason =
             "macOS Desktop 接入尚待验证，当前仅保护专用入口启动的 Claude Code".into();
         state
@@ -31,6 +37,7 @@ impl Host {
         Ok(())
     }
     pub fn start(self: &Arc<Self>, server: ipc::Server) {
+        self.codex.start(self.engine.stop.clone());
         let host = self.clone();
         tokio::spawn(async move {
             loop {
@@ -74,6 +81,8 @@ impl Host {
         let mut response = Response::default();
         let result: Result<()> = async {
             match request.action.as_str() {
+                "codexRefresh" => self.codex.refresh(),
+                "codexRead" => self.codex.mark_read(),
                 "status" => {}
                 "recheck" => self.engine.invalidate(),
                 "switchPreferred" => self.engine.switch_preferred(request.node).await?,

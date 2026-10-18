@@ -47,6 +47,7 @@ try{
     Copy-Item -LiteralPath (Join-Path $rustRoot 'target\release\claude-guard.exe') -Destination (Join-Path $payload 'cli')
     Get-ChildItem -LiteralPath (Join-Path $projectRoot 'extension') -File | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $payload 'extension')}
     Copy-Item -LiteralPath (Join-Path $rustRoot 'README.zh-CN.md') -Destination (Join-Path $payload '使用说明.md')
+    Copy-Item -LiteralPath (Join-Path $projectRoot 'docs\CODEX.md') -Destination (Join-Path $payload 'Codex 使用说明.md')
     if(Test-Path -LiteralPath (Join-Path $rustRoot 'VALIDATION.md')){Copy-Item -LiteralPath (Join-Path $rustRoot 'VALIDATION.md') -Destination $payload}
     $zip=Join-Path $dist 'payload.zip'
     if(Test-Path -LiteralPath $zip){Remove-Item -LiteralPath $zip}

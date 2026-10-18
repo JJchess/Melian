@@ -2,7 +2,7 @@
   <img src="docs/brand-mark.svg" width="80" height="80" alt="Melian 夜莺标志" />
   <h1>Melian</h1>
   <p><strong>一个小小的灵动岛，守住 Claude 的网络连接。</strong></p>
-  <p>原生 Rust · 网络检查 · 静音可见提醒 · 登录自启</p>
+  <p>原生 Rust · 网络检查 · Codex 额度 · 静音可见提醒 · 登录自启</p>
   <p>
     <img src="https://img.shields.io/badge/Windows-11_x64-17191c?style=flat-square" alt="Windows 11 x64" />
     <img src="https://img.shields.io/badge/macOS-13%2B_Apple_Silicon_%2F_Intel-17191c?style=flat-square" alt="macOS 13+ Apple Silicon / Intel" />
@@ -79,6 +79,12 @@ claude-guard --status
 只保护此入口启动的前台会话。直接运行 `claude`、已有会话、后台任务、WSL 与 SSH 远端不在范围内。Mac 安装后请新开终端，使 CLI 的 PATH 设置生效。
 
 Windows Desktop 接入需要新版官方 MSIX 客户端。首次接入时完全退出 Desktop，再从 Melian 打开，继续使用原登录。已接入后，异常时阻止新启动，已打开的窗口保留并断网。详见 [Windows 指南](rust/README.zh-CN.md)。
+
+### Codex 额度与重置
+
+菜单新增 **Codex · 剩余百分比**。点击查看当前账号的额度窗口、正常重置时间，以及 Tibo 明确发布的额外重置预告。复用本机 Codex 登录，不需要配置 X 密钥。新预告或额度用尽后恢复时展开六秒，收起保留未读小点。
+
+公告由 [codex-reset.com](https://codex-reset.com/) 聚合，面板内标注来源并链接 X 原帖；不预测尚未公布的重置。账号实际额度与公告分别显示。详见 [Codex 使用说明](docs/CODEX.md)。
 
 ### 更新与卸载
 

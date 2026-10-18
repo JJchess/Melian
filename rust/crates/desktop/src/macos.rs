@@ -21,6 +21,10 @@ struct ViewState {
     state: State,
     expanded: bool,
     details: bool,
+    codex_details: bool,
+    codex_page: usize,
+    codex_preview: Option<guard_protocol::codex::CodexState>,
+    codex_notifications: guard_platform::codex::presentation::NotificationCursor,
     feedback: Option<String>,
     alerts: crate::alerts::Alerts,
     collapse_at: Option<Instant>,
@@ -70,7 +74,7 @@ define_class!(
         #[unsafe(method(performAction:))]fn perform_action(&self,sender:&NSButton){self.action(sender.tag() as usize);}
         #[unsafe(method(toggle:))]fn toggle(&self,_sender:Option<&AnyObject>){let expanded=!self.ivars().state.borrow().expanded;self.expand(expanded,true);}
         #[unsafe(method(tick:))]fn tick(&self,_timer:&NSTimer){self.poll();}
-        #[unsafe(method(wake:))]fn wake(&self,_notification:&NSNotification){self.ivars().state.borrow().host.engine.invalidate();}
+        #[unsafe(method(wake:))]fn wake(&self,_notification:&NSNotification){let s=self.ivars().state.borrow();s.host.engine.invalidate();s.host.codex.refresh();}
     }
 );
 fn rect(x: f64, y: f64, w: f64, h: f64) -> NSRect {
@@ -133,7 +137,45 @@ impl IslandView {
             13.,
             &heading,
         );
-        if s.expanded {
+        if s.state.codex.as_ref().is_some_and(|c| c.unread) && !s.expanded {
+            color(0.61, 0.69, 1.).setFill();
+            NSBezierPath::bezierPathWithOvalInRect(rect(bounds.size.width - 13., 8., 5., 5.))
+                .fill();
+        }
+        if s.expanded && s.codex_details {
+            let d = guard_platform::codex::presentation::details(
+                s.state.codex.as_ref(),
+                s.codex_page,
+                chrono::Utc::now(),
+            );
+            let primary = color(0.90, 0.90, 0.94);
+            let secondary = color(0.65, 0.65, 0.70);
+            let title = s
+                .state
+                .codex
+                .as_ref()
+                .filter(|c| c.unread && s.collapse_at.is_some())
+                .map(|c| c.notification.as_str())
+                .filter(|t| !t.is_empty())
+                .unwrap_or("Codex");
+            text(title, 20., 43., 208., 24., 14., &primary);
+            text(&d.quota, 20., 74., 208., 22., 12., &primary);
+            text(&d.reset, 20., 98., 208., 32., 11., &secondary);
+            if d.pages == 1 {
+                text(&d.checked, 20., 132., 208., 24., 11., &secondary);
+            }
+            text(
+                &d.announcement,
+                20.,
+                173.,
+                208.,
+                22.,
+                12.,
+                &color(0.79, 0.81, 1.),
+            );
+            text(&d.summary, 20., 198., 208., 42., 11., &secondary);
+            text(&d.expected, 20., 241., 208., 30., 11., &secondary);
+        } else if s.expanded {
             let reason = s.feedback.as_deref().unwrap_or(&s.state.reason);
             let show_reason = !s.state.allowed || s.feedback.is_some();
             if show_reason {
@@ -169,12 +211,14 @@ impl IslandView {
         if s.expanded {
             NSSize::new(
                 248.,
-                if s.details {
-                    370.
+                if s.codex_details {
+                    424.
+                } else if s.details {
+                    444.
                 } else if !s.state.allowed || s.feedback.is_some() {
-                    308.
+                    349.
                 } else {
-                    212.
+                    253.
                 },
             )
         } else {
@@ -193,6 +237,7 @@ impl IslandView {
             let mut s = self.ivars().state.borrow_mut();
             s.expanded = expanded;
             s.details = false;
+            s.codex_details = false;
             if !expanded {
                 s.feedback = None;
             }
@@ -249,46 +294,79 @@ impl IslandView {
             }
             let show_reason = !s.state.allowed || s.feedback.is_some();
             let mut entries: Vec<(usize, String, f64)> = Vec::new();
-            if show_reason {
-                let label = match s.state.suggested_action.as_str() {
-                    "startClash" => "打开代理客户端",
-                    "switchPreferred" => "恢复代理",
-                    "openClash" => "打开代理客户端",
-                    _ => "重新检查",
-                };
-                entries.push((4, label.into(), 85.));
-                entries.push((
-                    5,
-                    if s.details {
-                        "收起详情"
-                    } else {
-                        "查看详情"
-                    }
-                    .into(),
-                    113.,
-                ));
-            }
-            let start = if s.details {
-                247.
-            } else if show_reason {
-                152.
+            if s.codex_details {
+                let d = guard_platform::codex::presentation::details(
+                    s.state.codex.as_ref(),
+                    s.codex_page,
+                    chrono::Utc::now(),
+                );
+                if d.pages > 1 {
+                    entries.push((
+                        10,
+                        format!("额度 {}/{}  ›", s.codex_page % d.pages + 1, d.pages),
+                        132.,
+                    ));
+                }
+                entries.push((8, "来源：codex-reset.com".into(), 272.));
+                if d.post.is_some() {
+                    entries.push((9, "查看 X 原帖 ↗".into(), 302.));
+                }
+                entries.push((7, format!("刷新 · {}", d.checked), 340.));
+                self.setAccessibilityLabel(Some(&NSString::from_str(&format!(
+                    "{}。{}。{}。{}。{}",
+                    d.quota, d.reset, d.checked, d.summary, d.expected
+                ))));
+                entries.push((11, "返回".into(), 378.));
             } else {
-                52.
-            };
-            for (index, title) in [
-                "Claude Code",
-                "Claude 网页",
-                if integration::auto_start() {
-                    "开机自启     ✓"
+                self.setAccessibilityLabel(Some(&NSString::from_str("Melian 菜单")));
+                if show_reason {
+                    let label = match s.state.suggested_action.as_str() {
+                        "startClash" => "打开代理客户端",
+                        "switchPreferred" => "恢复代理",
+                        "openClash" => "打开代理客户端",
+                        _ => "重新检查",
+                    };
+                    entries.push((4, label.into(), 85.));
+                    entries.push((
+                        5,
+                        if s.details {
+                            "收起详情"
+                        } else {
+                            "查看详情"
+                        }
+                        .into(),
+                        113.,
+                    ));
+                }
+                let start = if s.details {
+                    247.
+                } else if show_reason {
+                    152.
                 } else {
-                    "开机自启"
-                },
-                "退出",
-            ]
-            .into_iter()
-            .enumerate()
-            {
-                entries.push((index, title.into(), start + index as f64 * 37.));
+                    52.
+                };
+                for (position, (index, title)) in [
+                    (0, "Claude Code".into()),
+                    (1, "Claude 网页".into()),
+                    (
+                        6,
+                        guard_platform::codex::presentation::menu(s.state.codex.as_ref()),
+                    ),
+                    (
+                        2,
+                        if integration::auto_start() {
+                            "开机自启     ✓".into()
+                        } else {
+                            "开机自启".into()
+                        },
+                    ),
+                    (3, "退出".into()),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    entries.push((index, title, start + position as f64 * 37.));
+                }
             }
             for (id, label, y) in entries {
                 let button = NSButton::buttonWithTitle_target_action(
@@ -300,13 +378,18 @@ impl IslandView {
                 button.setTag(id as isize);
                 button.setBordered(false);
                 button.setAlignment(NSTextAlignment::Left);
-                button.setFont(Some(&NSFont::systemFontOfSize(if id >= 4 {
+                button.setFont(Some(&NSFont::systemFontOfSize(if id >= 4 && id != 6 {
                     11.
                 } else {
                     13.
                 })));
                 button.setContentTintColor(Some(&color(0.91, 0.91, 0.92)));
-                button.setFrame(rect(17., y, 214., if id >= 4 { 26. } else { 34. }));
+                button.setFrame(rect(
+                    17.,
+                    y,
+                    214.,
+                    if id >= 4 && id != 6 { 26. } else { 34. },
+                ));
                 button.setAccessibilityLabel(Some(&NSString::from_str(&label)));
                 self.addSubview(&button);
                 s.buttons.push(button);
@@ -316,7 +399,16 @@ impl IslandView {
     }
     fn focus(&self, delta: i32) {
         let mut s = self.ivars().state.borrow_mut();
-        s.focus = ((s.focus as i32 + delta + 4) % 4) as usize;
+        if s.buttons.is_empty() {
+            return;
+        }
+        let position = s
+            .buttons
+            .iter()
+            .position(|b| b.tag() == s.focus as isize)
+            .unwrap_or(0);
+        let next = (position as i32 + delta).rem_euclid(s.buttons.len() as i32) as usize;
+        s.focus = s.buttons[next].tag() as usize;
         if let Some(button) = s.buttons.iter().find(|b| b.tag() == s.focus as isize) {
             if let Some(window) = self.window() {
                 window.makeFirstResponder(Some(button));
@@ -324,6 +416,43 @@ impl IslandView {
         }
     }
     fn action(&self, index: usize) {
+        self.ivars().state.borrow_mut().collapse_at = None;
+        if (6..=11).contains(&index) {
+            {
+                let mut s = self.ivars().state.borrow_mut();
+                s.host.codex.mark_read();
+                match index {
+                    6 => {
+                        s.codex_details = true;
+                        s.details = false;
+                        s.codex_page = 0;
+                        s.host.codex.refresh();
+                    }
+                    7 => s.host.codex.refresh(),
+                    8 => {
+                        let _ = guard_platform::codex::open_link(
+                            guard_platform::codex::announcements::SOURCE,
+                        );
+                    }
+                    9 => {
+                        let d = guard_platform::codex::presentation::details(
+                            s.state.codex.as_ref(),
+                            s.codex_page,
+                            chrono::Utc::now(),
+                        );
+                        if let Some(url) = d.post {
+                            let _ = guard_platform::codex::open_link(&url);
+                        }
+                    }
+                    10 => s.codex_page += 1,
+                    11 => s.codex_details = false,
+                    _ => {}
+                }
+                s.state = s.host.state();
+            }
+            self.layout(true);
+            return;
+        }
         if index == 5 {
             let details = !self.ivars().state.borrow().details;
             self.ivars().state.borrow_mut().details = details;
@@ -354,6 +483,7 @@ impl IslandView {
         let mut show = false;
         let mut exit = false;
         let mut changed = false;
+        let mut codex_peek = false;
         {
             let mut s = self.ivars().state.borrow_mut();
             while let Ok(event) = s.events.try_recv() {
@@ -366,7 +496,22 @@ impl IslandView {
                     }
                 }
             }
-            let state = s.host.state();
+            let mut state = s.host.state();
+            if let Some(fixture) = &s.codex_preview {
+                state.codex = Some(fixture.clone());
+            }
+            let expanded = s.expanded;
+            if s.codex_notifications
+                .should_peek(state.codex.as_ref(), state.allowed, expanded)
+            {
+                codex_peek = true;
+                show = true;
+                s.collapse_at = Some(now + Duration::from_secs(6));
+            }
+            if !state.allowed && s.codex_details && s.collapse_at.is_some() {
+                s.codex_details = false;
+                changed = true;
+            }
             if s.alerts.update(
                 state.allowed,
                 state.status == "blocked",
@@ -379,7 +524,7 @@ impl IslandView {
                     NSBeep();
                 }
             }
-            let key = format!(
+            let mut key = format!(
                 "{}|{}|{}|{}|{}",
                 state.status,
                 state.reason,
@@ -387,6 +532,10 @@ impl IslandView {
                 integration::auto_start(),
                 s.feedback.as_deref().unwrap_or("")
             );
+            key.push_str(&serde_json::to_string(&state.codex).unwrap_or_default());
+            if s.expanded && s.codex_details {
+                key.push_str(&(chrono::Utc::now().timestamp() / 60).to_string());
+            }
             if key != s.fingerprint {
                 s.fingerprint = key;
                 changed = true;
@@ -395,6 +544,7 @@ impl IslandView {
             if s.collapse_at.is_some_and(|t| t <= now) {
                 s.expanded = false;
                 s.details = false;
+                s.codex_details = false;
                 s.collapse_at = None;
                 changed = true;
             }
@@ -434,6 +584,10 @@ impl IslandView {
             let deadline = self.ivars().state.borrow().collapse_at;
             self.expand(true, false);
             self.ivars().state.borrow_mut().collapse_at = deadline;
+            if codex_peek {
+                self.ivars().state.borrow_mut().codex_details = true;
+                self.layout(true);
+            }
         } else if changed {
             self.layout(false);
         }
@@ -503,6 +657,14 @@ pub fn run() -> Result<()> {
             state: engine.state(),
             expanded: false,
             details: false,
+            codex_details: false,
+            codex_page: 0,
+            codex_preview: if preview && args.iter().any(|a| a == "--preview-codex") {
+                Some(guard_platform::codex::presentation::preview())
+            } else {
+                None
+            },
+            codex_notifications: Default::default(),
             feedback: None,
             alerts: Default::default(),
             collapse_at: None,
@@ -572,6 +734,10 @@ pub fn run() -> Result<()> {
         if smoke {
             eprintln!("AppKit smoke: expanding");
             view.expand(true, false);
+            if args.iter().any(|a| a == "--preview-codex") {
+                view.ivars().state.borrow_mut().codex_details = true;
+                view.layout(false);
+            }
             eprintln!("AppKit smoke: entering event loop");
         }
         app.run();
