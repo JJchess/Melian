@@ -20,6 +20,8 @@ async fn main() -> anyhow::Result<()> {
         let value=serde_json::json!({
             "availability":state.availability,"remaining":state.remaining(),
             "windows":state.windows.len(),"accountUpdated":state.account_updated_at.is_some(),
+            "accountUpdatedAt":state.account_updated_at,
+            "announcementUpdatedAt":state.announcement_updated_at,
             "announcementsUpdated":state.announcement_updated_at.is_some(),
             "announcementsStale":state.announcement_stale,"announcementsError":state.announcement_error,
             "elapsedSeconds":start.elapsed().as_secs()/10*10

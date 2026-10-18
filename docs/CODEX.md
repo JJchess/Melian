@@ -42,3 +42,5 @@ cargo run --manifest-path rust/Cargo.toml -p guard-platform --example codex_prob
 该检查读取真实账号和公开公告，只输出可用性、剩余比例和更新状态，不输出账号标识。会写入正常公告缓存；不修改代理设置。
 
 参考：[Codex App Server](https://learn.chatgpt.com/docs/app-server)、[公告 API](https://codex-reset.com/developers)。
+
+测试结果、资源占用及尚待实机验证的项目见 [验收记录](CODEX-VALIDATION.md)。

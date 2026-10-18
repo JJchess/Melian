@@ -291,7 +291,7 @@ impl Monitor {
                         if client.is_none() {
                             let Some(path)=account::discover() else {
                                 self.account_error("notInstalled","未找到 Codex，请先安装并登录");
-                                return Ok(());
+                                return Ok(true);
                             };
                             client=Some(account::AccountClient::start(path).await?);
                         }
@@ -307,18 +307,27 @@ impl Monitor {
                                 self.auth(confirmed);
                                 let mut i=self.inner.lock().unwrap();
                                 i.state.windows.clear();i.state.account_updated_at=None;
-                                anyhow::bail!("账号已切换，重新检查");
+                                return Ok(false);
                             }
                             self.quota(&data)?;
                         }
-                        Ok::<_,anyhow::Error>(())
+                        Ok::<_,anyhow::Error>(true)
                     }=>result
                 };
-                if result.is_err() {
-                    self.account_error("unavailable", "暂时无法读取 Codex 额度");
-                    client = None;
-                }
-                due = Instant::now() + Duration::from_secs(60);
+                due = match result {
+                    Ok(true) => Instant::now() + Duration::from_secs(60),
+                    Ok(false) => {
+                        // Startup can emit account/updated between reads. Keep this child:
+                        // restarting it would recreate the same initialization race.
+                        self.account_error("checking", "正在同步 Codex 账号");
+                        Instant::now() + Duration::from_secs(15)
+                    }
+                    Err(_) => {
+                        self.account_error("unavailable", "暂时无法读取 Codex 额度");
+                        client = None;
+                        Instant::now() + Duration::from_secs(60)
+                    }
+                };
             }
             tokio::select! {
                 _=stop.cancelled()=>break,
