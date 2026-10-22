@@ -274,7 +274,7 @@ impl App {
             return self.collapsed_size().1;
         }
         match self.view {
-            View::Codex => 424.,
+            View::Codex => 448.,
             View::Guide => {
                 if guard_platform::browser::AUTOMATIC_ENROLLMENT_ENABLED {
                     358.
@@ -749,10 +749,10 @@ impl App {
                     if d.pages > 1 {
                         self.row(18, &format!("额度 {}/{}  ›", self.codex_page % d.pages + 1, d.pages), 132., None);
                     }
-                    self.row(16, "来源：codex-reset.com", 272., None);
-                    if d.post.is_some() { self.row(17, "查看 X 原帖 ↗", 302., None); }
-                    self.row(15, &format!("刷新 · {}",d.checked), 340., None);
-                    self.row(10, "返回", 378., None);
+                    self.row(16, "来源：codex-reset.com", 296., None);
+                    if d.post.is_some() { self.row(17, "查看 X 原帖 ↗", 326., None); }
+                    self.row(15, &format!("刷新 · {}",d.source_checked), 364., None);
+                    self.row(10, "返回", 402., None);
                 }
             }
         }
@@ -903,8 +903,9 @@ impl App {
                     if d.pages == 1 {r.text(&d.checked, rect(24., 132., 208., 28.), 0x777780, a, 1);}
                     r.line((24., 166.), (232., 166.), 0xffffff, 0.07*a, 1.);
                     r.text(&d.announcement, rect(24., 173., 208., 22.), 0xc9cfff, a, 1);
-                    r.text(&d.summary, rect(24., 198., 208., 42.), 0xc8c8d0, a, 1);
-                    r.text(&d.expected, rect(24., 241., 208., 30.), 0x92929e, a, 1);
+                    r.text(&d.published, rect(24., 198., 208., 22.), 0x92929e, a, 1);
+                    r.text(&d.summary, rect(24., 222., 208., 42.), 0xc8c8d0, a, 1);
+                    r.text(&d.expected, rect(24., 265., 208., 30.), 0x92929e, a, 1);
                 }
                 View::Guide if !guard_platform::browser::AUTOMATIC_ENROLLMENT_ENABLED => {
                     r.text(
@@ -1130,7 +1131,7 @@ impl App {
             data.focused = self.focus;
             data.status = if self.expanded && self.view == View::Codex {
                 let d=guard_platform::codex::presentation::details(self.state.codex.as_ref(),self.codex_page,chrono::Utc::now());
-                format!("{}。{}。{}。{}。{}",d.quota,d.reset,d.checked,d.summary,d.expected)
+                format!("{}。{}。{}。{}。{}。{}。{}。{}",d.quota,d.reset,d.checked,d.announcement,d.published,d.summary,d.expected,d.source_checked)
             } else if self.state.allowed {
                 "网络检查通过。展开查看各入口的接入状态。".into()
             } else {

@@ -173,8 +173,9 @@ impl IslandView {
                 12.,
                 &color(0.79, 0.81, 1.),
             );
-            text(&d.summary, 20., 198., 208., 42., 11., &secondary);
-            text(&d.expected, 20., 241., 208., 30., 11., &secondary);
+            text(&d.published, 20., 198., 208., 22., 11., &secondary);
+            text(&d.summary, 20., 222., 208., 42., 11., &secondary);
+            text(&d.expected, 20., 265., 208., 30., 11., &secondary);
         } else if s.expanded {
             let reason = s.feedback.as_deref().unwrap_or(&s.state.reason);
             let show_reason = !s.state.allowed || s.feedback.is_some();
@@ -212,7 +213,7 @@ impl IslandView {
             NSSize::new(
                 248.,
                 if s.codex_details {
-                    424.
+                    448.
                 } else if s.details {
                     444.
                 } else if !s.state.allowed || s.feedback.is_some() {
@@ -307,16 +308,23 @@ impl IslandView {
                         132.,
                     ));
                 }
-                entries.push((8, "来源：codex-reset.com".into(), 272.));
+                entries.push((8, "来源：codex-reset.com".into(), 296.));
                 if d.post.is_some() {
-                    entries.push((9, "查看 X 原帖 ↗".into(), 302.));
+                    entries.push((9, "查看 X 原帖 ↗".into(), 326.));
                 }
-                entries.push((7, format!("刷新 · {}", d.checked), 340.));
+                entries.push((7, format!("刷新 · {}", d.source_checked), 364.));
                 self.setAccessibilityLabel(Some(&NSString::from_str(&format!(
-                    "{}。{}。{}。{}。{}",
-                    d.quota, d.reset, d.checked, d.summary, d.expected
+                    "{}。{}。{}。{}。{}。{}。{}。{}",
+                    d.quota,
+                    d.reset,
+                    d.checked,
+                    d.announcement,
+                    d.published,
+                    d.summary,
+                    d.expected,
+                    d.source_checked
                 ))));
-                entries.push((11, "返回".into(), 378.));
+                entries.push((11, "返回".into(), 402.));
             } else {
                 self.setAccessibilityLabel(Some(&NSString::from_str("Melian 菜单")));
                 if show_reason {

@@ -22,6 +22,9 @@ async fn main() -> anyhow::Result<()> {
             "windows":state.windows.len(),"accountUpdated":state.account_updated_at.is_some(),
             "accountUpdatedAt":state.account_updated_at,
             "announcementUpdatedAt":state.announcement_updated_at,
+            "announcementSourceUpdatedAt":state.announcement_source_updated_at,
+            "announcementId":state.announcement.as_ref().map(|a|a.id.as_str()),
+            "announcementPublishedAt":state.announcement.as_ref().and_then(|a|a.published_at),
             "announcementsUpdated":state.announcement_updated_at.is_some(),
             "announcementsStale":state.announcement_stale,"announcementsError":state.announcement_error,
             "elapsedSeconds":start.elapsed().as_secs()/10*10

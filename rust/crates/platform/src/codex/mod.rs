@@ -40,6 +40,7 @@ struct Cache {
     seen: Vec<String>,
     announcement: Option<ResetAnnouncement>,
     updated_at: Option<DateTime<Utc>>,
+    source_updated_at: Option<DateTime<Utc>>,
     unread: bool,
     notification_id: u64,
     notification: String,
@@ -74,6 +75,7 @@ impl Monitor {
                 .clone()
                 .filter(|a| announcements::safe_post(&a.url)),
             announcement_updated_at: cache.updated_at,
+            announcement_source_updated_at: cache.source_updated_at,
             unread: cache.unread,
             notification_id: cache.notification_id,
             notification: cache.notification.clone(),
@@ -203,7 +205,7 @@ impl Monitor {
         i.state.availability = status.into();
         i.state.message = message.into();
     }
-    fn feed(&self, value: Option<ResetAnnouncement>) {
+    fn feed(&self, value: Option<ResetAnnouncement>, source_updated_at: Option<DateTime<Utc>>) {
         let now = Utc::now();
         let mut i = self.inner.lock().unwrap();
         if let Some(a) = &value {
@@ -230,8 +232,10 @@ impl Monitor {
         i.cache.seeded = true;
         i.cache.announcement = value.clone();
         i.cache.updated_at = Some(now);
+        i.cache.source_updated_at = source_updated_at;
         i.state.announcement = value;
         i.state.announcement_updated_at = Some(now);
+        i.state.announcement_source_updated_at = source_updated_at;
         i.state.announcement_error = None;
         self.save(&i.cache);
     }
@@ -357,6 +361,7 @@ impl Monitor {
         let mut due = Instant::now();
         let mut last = Instant::now() - Duration::from_secs(120);
         let mut failures = 0u32;
+        let mut timeline = TimelinePoll::default();
         loop {
             tokio::select! {
                 _=stop.cancelled()=>break,
@@ -367,12 +372,12 @@ impl Monitor {
                 }
             }
             last = Instant::now();
-            let result = tokio::select! {_=stop.cancelled()=>break, r=fetch_feed()=>r};
+            let result = tokio::select! {_=stop.cancelled()=>break, r=fetch_feed(&mut timeline)=>r};
             let delay = match result {
                 Ok((feed, timeline, cache_seconds)) => {
                     match announcements::parse(&feed, &timeline, Utc::now()) {
                         Ok(a) => {
-                            self.feed(a);
+                            self.feed(a, announcements::source_updated_at(&feed));
                             failures = 0;
                         }
                         Err(_) => {
@@ -395,12 +400,35 @@ impl Monitor {
     }
 }
 
-async fn fetch_feed() -> Result<(Value, Value, u64), u64> {
+#[derive(Default)]
+struct TimelinePoll {
+    due: Option<Instant>,
+    value: Value,
+}
+impl TimelinePoll {
+    async fn read(&mut self, client: &reqwest::Client, url: &str) -> Value {
+        if self.due.is_none_or(|due| Instant::now() >= due) {
+            let delay = match get_json(client, url).await {
+                Ok((value, delay)) => {
+                    self.value = value;
+                    delay
+                }
+                // History adds community confirmation only. Its failure must not hide
+                // a new post, or make Retry-After for history stop polling the feed.
+                Err(delay) => delay,
+            };
+            self.due = Some(Instant::now() + Duration::from_secs(delay.max(120)));
+        }
+        self.value.clone()
+    }
+}
+async fn fetch_feed(timeline: &mut TimelinePoll) -> Result<(Value, Value, u64), u64> {
     let client = http_client().map_err(|_| 120u64)?;
     let (feed, delay) = get_json(&client, "https://codex-reset.com/api/feed").await?;
-    let (timeline, timeline_delay) =
-        get_json(&client, "https://codex-reset.com/api/timeline").await?;
-    Ok((feed, timeline, delay.max(timeline_delay)))
+    let timeline = timeline
+        .read(&client, "https://codex-reset.com/api/timeline")
+        .await;
+    Ok((feed, timeline, delay))
 }
 fn http_client() -> anyhow::Result<reqwest::Client> {
     let mut builder = reqwest::Client::builder()
@@ -531,6 +559,37 @@ mod tests {
             task.await.unwrap();
         }
     }
+    #[tokio::test]
+    async fn history_outage_keeps_new_posts_visible_and_respects_its_own_backoff() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/timeline", listener.local_addr().unwrap());
+        let task = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut b = [0u8; 4096];
+            let _ = stream.read(&mut b).await;
+            stream.write_all(b"HTTP/1.1 429 Too Many Requests\r\nRetry-After: 720\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}").await.unwrap();
+        });
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        let mut poll = TimelinePoll::default();
+        assert!(poll.read(&client, &url).await.is_null());
+        task.await.unwrap();
+        let due = poll.due.unwrap();
+        assert!(due.duration_since(Instant::now()).as_secs() >= 718);
+        assert!(poll.read(&client, &url).await.is_null());
+        assert_eq!(poll.due, Some(due)); // Does not retry the closed server early.
+        let now = Utc::now();
+        let feed = json!({"fetched_at":now,"stale":false,"tweets":[{
+            "id":"1","url":"https://x.com/thsottiaux/status/1","at":now,
+            "text":"Day 17/ It’s reset day today."
+        }]});
+        let a = announcements::parse(&feed, &poll.value, now).unwrap();
+        let m = monitor();
+        m.feed(a, announcements::source_updated_at(&feed));
+        assert_eq!(m.state().announcement.unwrap().id, "1");
+        assert!(!m.state().announcement_stale);
+        let _ = std::fs::remove_file(&m.cache_path);
+    }
     fn monitor() -> Arc<Monitor> {
         Monitor::at(
             std::env::temp_dir().join(format!("melian-codex-test-{}.json", uuid::Uuid::new_v4())),
@@ -579,17 +638,17 @@ mod tests {
             url: "https://x.com/thsottiaux/status/1".into(),
             ..Default::default()
         };
-        m.feed(Some(a.clone()));
+        m.feed(Some(a.clone()), Some(Utc::now()));
         assert!(!m.state().unread);
         let b = ResetAnnouncement {
             id: "2".into(),
             ..a
         };
-        m.feed(Some(b.clone()));
+        m.feed(Some(b.clone()), Some(Utc::now()));
         assert!(m.state().unread);
         let id = m.state().notification_id;
         m.mark_read();
-        m.feed(Some(b));
+        m.feed(Some(b), Some(Utc::now()));
         assert_eq!(m.state().notification_id, id);
         assert!(!m.state().unread);
         let restored = Monitor::at(m.cache_path.clone());

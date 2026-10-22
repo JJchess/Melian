@@ -23,6 +23,24 @@ fn clean(text: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
 }
+fn normalized(text: &str) -> String {
+    clean(text).to_lowercase().replace('’', "'")
+}
+fn series_reset(text: &str) -> bool {
+    // The daily series often separates "Day N/" and "reset" with other words.
+    // Do not promote every mention of reset in that series into a promise.
+    let words: Vec<_> = text.split_whitespace().collect();
+    let day = words.windows(2).any(|w| {
+        w[0] == "day"
+            && w[1]
+                .strip_suffix('/')
+                .is_some_and(|n| n.parse::<u16>().is_ok_and(|n| n > 0))
+    });
+    day && (text.contains("/ reset")
+        || text.contains("limit reset")
+        || text.contains("it's reset day")
+        || text.contains("and reset. enjoy"))
+}
 fn excluded(text: &str) -> bool {
     [
         "banked",
@@ -38,6 +56,9 @@ fn excluded(text: &str) -> bool {
         "jok",
         "rumor",
         "rumour",
+        "asking for",
+        "requesting",
+        "demand ",
         "not resetting",
         "no reset",
         "won't reset",
@@ -57,9 +78,87 @@ fn explicit(text: &str) -> bool {
             || text.contains("resetting limits")
             || text.contains("reset of") && text.contains("codex")
             || text.contains("reset") && (text.contains("codex") || text.contains("usage limits"))
-            || text.contains("day ") && text.contains("/ reset")
+            || series_reset(text)
             || text.contains("reset")
                 && (text.contains("it's done") || text.contains("all propagated")))
+}
+fn valid_post(post: &Value, now: DateTime<Utc>) -> Option<(&str, &str, DateTime<Utc>)> {
+    let url = post["url"].as_str().filter(|u| safe_post(u))?;
+    let id = post["id"].as_str()?;
+    let at = time(&post["at"])?;
+    (url.ends_with(&format!("/{id}"))
+        && at <= now + Duration::minutes(2)
+        && now - at <= Duration::days(7))
+    .then_some((id, url, at))
+}
+fn completion(text: &str) -> bool {
+    text.contains("all propagated")
+        || text.contains("it's done")
+        || text.contains("reset complete")
+        || text.contains("confirmed landed")
+        || text.contains("done and dusted")
+        || text.trim_end_matches(['.', '!']) == "done"
+}
+fn timing_reply(text: &str) -> bool {
+    [
+        "landing",
+        "lands ",
+        "will land",
+        "will be",
+        "within",
+        "correction",
+        "meant ",
+        "cancelled",
+        "canceled",
+        "no reset",
+        "not resetting",
+        "postponed",
+        "delayed",
+    ]
+    .iter()
+    .any(|p| text.contains(p))
+        || completion(text)
+}
+fn parent_reset(post: &Value, tweets: &[Value], now: DateTime<Utc>) -> bool {
+    let mut child = post;
+    let mut seen = std::collections::HashSet::new();
+    for _ in 0..8 {
+        let Some(id) = child["in_reply_to_tweet_id"].as_str() else {
+            return false;
+        };
+        if !seen.insert(id) {
+            return false;
+        }
+        let Some(parent) = tweets
+            .iter()
+            .take(500)
+            .find(|p| p["id"].as_str() == Some(id))
+        else {
+            return false;
+        };
+        let Some((_, _, at)) = valid_post(parent, now) else {
+            return false;
+        };
+        if time(&child["at"]).is_none_or(|child_at| at > child_at) {
+            return false;
+        }
+        let text = normalized(parent["text"].as_str().unwrap_or(""));
+        if explicit(&text) {
+            return true;
+        }
+        if !timing_reply(&text) {
+            return false;
+        }
+        child = parent;
+    }
+    false
+}
+fn timing_note(text: &str, expected: Option<DateTime<Utc>>) -> Option<String> {
+    (expected.is_none()
+        && ["tomorrow", "today", "pst", "pdt", "eod", "before ", " at "]
+            .iter()
+            .any(|p| normalized(text).contains(p)))
+    .then(|| "时间表述有歧义 · 请查看原帖".into())
 }
 /// Intentionally conservative: ambiguous local dates / PST during DST are text only.
 pub fn expected_by(text: &str, posted: DateTime<Utc>) -> Option<DateTime<Utc>> {
@@ -122,30 +221,12 @@ pub fn parse(
         .ok_or_else(|| anyhow::anyhow!("公告格式已变化"))?;
     let mut found = Vec::new();
     for post in tweets.iter().take(500) {
-        let Some(url) = post["url"].as_str().filter(|u| safe_post(u)) else {
+        let Some((id, url, at)) = valid_post(post, now) else {
             continue;
         };
-        let Some(id) = post["id"].as_str() else {
-            continue;
-        };
-        if !url.ends_with(&format!("/{id}")) {
-            continue;
-        }
-        let Some(at) = time(&post["at"]) else {
-            continue;
-        };
-        if at > now + Duration::minutes(2) || now - at > Duration::days(7) {
-            continue;
-        }
         let text = clean(post["text"].as_str().unwrap_or(""));
-        let lower = text.to_lowercase();
-        let parent = post["in_reply_to_tweet_id"]
-            .as_str()
-            .and_then(|parent_id| tweets.iter().find(|p| p["id"].as_str() == Some(parent_id)));
-        let parent_reset = parent.is_some_and(|p| {
-            safe_post(p["url"].as_str().unwrap_or(""))
-                && explicit(&clean(p["text"].as_str().unwrap_or("")).to_lowercase())
-        });
+        let lower = normalized(&text);
+        let parent_reset = parent_reset(post, tweets, now);
         let cancelled = lower.contains("cancelled")
             || lower.contains("canceled")
             || lower.contains("no reset")
@@ -156,16 +237,8 @@ pub fn parse(
         if excluded(&lower) && !correction {
             continue;
         }
-        let completed = lower.contains("all propagated")
-            || lower.contains("it's done")
-            || lower.contains("reset complete")
-            || lower.contains("confirmed landed");
-        let reply_timing = parent_reset
-            && (lower.contains("landing")
-                || lower.contains("will land")
-                || lower.contains("will be")
-                || lower.contains("within")
-                || completed);
+        let completed = completion(&lower);
+        let reply_timing = parent_reset && timing_reply(&lower);
         if !explicit(&lower) && !reply_timing && !correction {
             continue;
         }
@@ -196,9 +269,11 @@ pub fn parse(
                 events.iter().any(|e| {
                     e["url"].as_str() == Some(url)
                         && e["group"] == "reset"
-                        && e["summary"]
-                            .as_str()
-                            .is_some_and(|s| s.to_lowercase().contains("observed by operator"))
+                        && e["banked_grant"] != true
+                        && (e["confirmed"] == true
+                            || e["summary"]
+                                .as_str()
+                                .is_some_and(|s| s.to_lowercase().contains("observed by operator")))
                 })
             })
         {
@@ -218,12 +293,17 @@ pub fn parse(
             url: url.into(),
             published_at: Some(at),
             expected_by: expected,
+            timing_note: timing_note(&text, expected),
             phase: phase.into(),
             source: SOURCE.into(),
         });
     }
     found.sort_by_key(|a| a.published_at);
     Ok(found.pop())
+}
+
+pub fn source_updated_at(feed: &Value) -> Option<DateTime<Utc>> {
+    time(&feed["fetched_at"])
 }
 
 #[cfg(test)]
@@ -329,5 +409,98 @@ mod tests {
         .is_err());
         assert!(!safe_post("https://x.com/thsottiaux/status/123?next=evil"));
         assert!(!safe_post("https://x.com.evil/thsottiaux/status/123"));
+    }
+    #[test]
+    fn october_22_reset_day_and_lands_reply_are_not_lost() {
+        let now = DateTime::parse_from_rfc3339("2026-10-22T07:01:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let parent = post(
+            "2113162277688070445",
+            "Day 17/ Bet you thought we forgot, but no, it’s reset day today.",
+            now - Duration::minutes(6),
+        );
+        let mut reply = post(
+            "2113162413008884099",
+            "Lands tomorrow before 10am PST.",
+            now - Duration::minutes(5),
+        );
+        reply["in_reply_to_tweet_id"] = json!("2113162277688070445");
+        let a = parse(&feed(json!([reply, parent]), now), &json!({}), now)
+            .unwrap()
+            .unwrap();
+        assert_eq!(a.id, "2113162413008884099");
+        assert_eq!(a.phase, "announced");
+        assert!(a.expected_by.is_none());
+        assert!(a.timing_note.is_some());
+        assert_eq!(a.published_at, Some(now - Duration::minutes(5)));
+    }
+    #[test]
+    fn daily_variations_and_structured_community_confirmation() {
+        let now = Utc::now();
+        for text in [
+            "Day 13/ Le limit reset",
+            "Day 15/ Nevermind, we're still cooking... and reset. Enjoy.",
+        ] {
+            let timeline = json!({"events":[{"url":"https://x.com/thsottiaux/status/1", "group":"reset", "confirmed":true, "banked_grant":false}]});
+            let a = parse(&feed(json!([post("1", text, now)]), now), &timeline, now)
+                .unwrap()
+                .unwrap();
+            assert_eq!(a.phase, "communityReported");
+        }
+        for text in [
+            "I demand a reset",
+            "Day 17/ Can we get a reset?",
+            "Day 17/ I hope it's reset day",
+            "Day 17/ More reset credits",
+            "Day 17/ We might reset Codex",
+            "Day 17/ People are asking for a limit reset",
+        ] {
+            assert!(
+                parse(&feed(json!([post("1", text, now)]), now), &json!({}), now)
+                    .unwrap()
+                    .is_none(),
+                "{text}"
+            );
+        }
+    }
+    #[test]
+    fn nested_replies_need_valid_context_and_newer_correction_wins() {
+        let now = Utc::now();
+        let parent = post("1", "Global reset in two hours", now - Duration::minutes(3));
+        let mut reply = post(
+            "2",
+            "Lands tomorrow before 10am PST.",
+            now - Duration::minutes(2),
+        );
+        reply["in_reply_to_tweet_id"] = json!("1");
+        let mut correction = post("3", "Correction, lands within 3 hours", now);
+        correction["in_reply_to_tweet_id"] = json!("2");
+        let a = parse(
+            &feed(json!([correction, reply, parent]), now),
+            &json!({}),
+            now,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(a.id, "3");
+        assert_eq!(a.expected_by, Some(now + Duration::hours(3)));
+        let mut orphan = post("4", "Lands within 2 hours", now);
+        orphan["in_reply_to_tweet_id"] = json!("missing");
+        assert!(parse(&feed(json!([orphan]), now), &json!({}), now)
+            .unwrap()
+            .is_none());
+    }
+    #[test]
+    fn completion_reply_does_not_claim_account_recovery() {
+        let now = Utc::now();
+        let parent = post("1", "Day 13/ Le limit reset", now - Duration::minutes(1));
+        let mut reply = post("2", "Done.", now);
+        reply["in_reply_to_tweet_id"] = json!("1");
+        let a = parse(&feed(json!([parent, reply]), now), &json!({}), now)
+            .unwrap()
+            .unwrap();
+        assert_eq!(a.phase, "reportedComplete");
+        assert!(a.expected_by.is_none());
     }
 }

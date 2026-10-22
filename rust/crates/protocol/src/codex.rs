@@ -21,6 +21,8 @@ pub struct ResetAnnouncement {
     pub published_at: Option<DateTime<Utc>>,
     /// Only a reliably parsed explicit time; never a historical prediction.
     pub expected_by: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timing_note: Option<String>,
     pub phase: String,
     pub source: String,
 }
@@ -35,6 +37,9 @@ pub struct CodexState {
     pub account_stale: bool,
     pub announcement: Option<ResetAnnouncement>,
     pub announcement_updated_at: Option<DateTime<Utc>>,
+    /// The aggregator's own fetch time, distinct from Melian's successful poll.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub announcement_source_updated_at: Option<DateTime<Utc>>,
     pub announcement_stale: bool,
     pub announcement_error: Option<String>,
     pub unread: bool,
@@ -45,8 +50,11 @@ pub struct CodexState {
 impl CodexState {
     pub fn freshened(mut self, now: DateTime<Utc>) -> Self {
         self.account_stale = stale(self.account_updated_at, now, 180);
-        self.announcement_stale =
-            self.announcement_error.is_some() || stale(self.announcement_updated_at, now, 300);
+        self.announcement_stale = self.announcement_error.is_some()
+            || stale(self.announcement_updated_at, now, 300)
+            || self.announcement_source_updated_at.is_some_and(|t| {
+                (now - t).num_seconds() > 300 || t > now + chrono::Duration::minutes(2)
+            });
         if let Some(a) = &mut self.announcement {
             if a.phase == "announced" && a.expected_by.is_some_and(|t| t <= now) {
                 a.phase = "awaitingConfirmation".into();
@@ -78,6 +86,20 @@ mod tests {
             serde_json::from_str(r#"{"status":"allowed","allowed":true}"#).unwrap();
         assert!(state.codex.is_none());
         assert!(!state.fresh_allowed());
+        let old: CodexState =
+            serde_json::from_str(r#"{"announcement":{"id":"1","phase":"announced"}}"#).unwrap();
+        assert!(old.announcement_source_updated_at.is_none());
+        assert!(old.announcement.unwrap().timing_note.is_none());
+    }
+    #[test]
+    fn successful_poll_cannot_make_an_old_upstream_snapshot_fresh() {
+        let now = Utc::now();
+        let state = CodexState {
+            announcement_updated_at: Some(now),
+            announcement_source_updated_at: Some(now - chrono::Duration::seconds(301)),
+            ..Default::default()
+        };
+        assert!(state.freshened(now).announcement_stale);
     }
     #[test]
     fn stale_and_clock_rollback_cannot_report_remaining() {
